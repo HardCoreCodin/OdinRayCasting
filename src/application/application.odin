@@ -3,6 +3,40 @@ package application
 import "core:fmt"
 print :: fmt.println;
 
+tile_map: TileMap;
+TILE_MAP_ASCII_GRID := `
+1111111111111111111111111111111111111111
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1___________22222223___________________1
+1__________________3___________________1
+1__________________3___________________1
+1__________________3___________________1
+1__________________34444444____________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1______________________________________1
+1111111111111111111111111111111111111111
+`;
+
 SPEED :: 240;
 MOVEMENT_SPEED :: 0.4;
 TURNING_SPEED :: 0.01;
@@ -26,7 +60,7 @@ canvas, frame_buffer: FrameBuffer;
 resize :: proc(new_width, new_height: i32) {
 	resizeFrameBuffer(new_width, new_height, &frame_buffer);
 	setRayCount(new_width);
-	setRayDirections();
+	generateRays(&camera);
 	castRays();
 	update();	
 }
@@ -55,7 +89,7 @@ update :: proc() {
 
 	if turned {
 		rotate(&camera.xform, turned_by, 0);
-		setRayDirections();
+		generateRays(&camera);
 	}
 
 	// if mouse_is_captured || middle_mouse_button.is_pressed {	
@@ -118,7 +152,6 @@ render :: proc() {
 	using camera.xform;
 	using frame_buffer;
 
-	ticks_before = getTicks();
 
 	fillRect(0, 0, width, height, &BLACK, &frame_buffer.bitmap);
 
@@ -128,39 +161,32 @@ render :: proc() {
 
 	padding: vec2i = {1, 1};
 
-	for ray in &rays do drawLine(position, ray.hit.position, &GREEN, &frame_buffer.bitmap);
+	// for ray in &rays do drawLine(position, ray.hit.position, &GREEN, &frame_buffer.bitmap);
 	for edge in &tile_map.edges {
 		using edge;
 		drawLine(from^, to^, color, &frame_buffer.bitmap);
-		print(1);
 		fillRect(from^ - padding, from^ + padding, &GREEN, &frame_buffer.bitmap);
-		print(2);
 		fillRect(to^   - padding, to^   + padding, &GREEN, &frame_buffer.bitmap);
-		print(3);
 	}
-	print(4);
 	fillCircle(position, 4, &RED, &frame_buffer.bitmap);
-
-	// bounds.min = coords - padding*2;
-	// bounds.max = coords + padding*2;
-
-	// fillBounds(&frame_buffer.bitmap, &bounds, &RED);
-
+	
+	ticks_before = getTicks();
+	castRays();
 	ticks_after = getTicks();	
 
 	accumulateTimer(&render_timer);
 
 	if (ticks_after - ticks_of_last_report) >= ticks_per_second {
-		// print(
-		// 	"Frame count:", accumulated_frame_count,
-		// 	"Average microseconds per frame:", 
-		// 	u64(
-		// 		microseconds_per_tick * (
-		// 			f64(accumulated_ticks) / 
-		// 			f64(accumulated_frame_count)
-		// 		)
-		// 	)
-		// );
+		print(
+			"Frame count:", accumulated_frame_count,
+			"Average microseconds per frame:", 
+			u64(
+				microseconds_per_tick * (
+					f64(accumulated_ticks) / 
+					f64(accumulated_frame_count)
+				)
+			)
+		);
 
 		accumulated_ticks = 0;
 		accumulated_frame_count = 0;

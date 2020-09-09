@@ -29,20 +29,19 @@ keyChanged :: proc(key: u8, pressed: bool) {
 	}
 }
 
-Coords2D :: [2]i32;
 MouseButton :: struct { 
 	is_pressed,
 	is_released: bool, 
 
 	down_pos, 
-	up_pos: Coords2D 
+	up_pos: vec2i 
 }
 
 middle_mouse_button,
 right_mouse_button,
 left_mouse_button: MouseButton;
 mouse_pos,
-mouse_pos_diff: Coords2D;
+mouse_pos_diff: vec2i;
 mouse_is_captured: bool;
 mouse_wheel_scrolled: bool;
 mouse_wheel_scroll_amount: i16;

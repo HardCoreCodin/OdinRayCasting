@@ -1,9 +1,9 @@
 package application
 
 _drawHLine2Di :: inline proc(from, to, at: i32, color: ^Color, using bitmap: ^Bitmap) {
-	if !inRange(at, height) do return;
+	if !_inRangeI(at, height) do return;
 	offset := at * width;
-	first, last := subRange(from, to, width);
+	first, last := _subRangeI(from, to, width);
 	first += offset;
 	last += offset;
 	for i in first..last do all_pixels[i].color = color^;
@@ -13,7 +13,7 @@ drawHLine2D :: proc{_drawHLine2Di, _drawHLine2Df};
 
 _drawVLine2Di :: inline proc(from, to, at: i32, color: ^Color, using bitmap: ^Bitmap) {
 	if !inRange(at, width) do return;
-	first, last := subRange(from, to, height);
+	first, last := _subRangeI(from, to, height);
 	first *= width; first += at;
 	last  *= width; last  += at;
 	for i := first; i <= last; i += width do all_pixels[i].color = color^;
@@ -72,10 +72,10 @@ _drawLine2Di :: inline proc(x0, y0, x1, y1: i32, color: ^Color, using bitmap: ^B
     for current1 != end {
         current1 += inc1;
         if is_steap {
-        	if inRange(current1, height) && inRange(current2, width) do
+        	if _inRangeI(current1, height) && _inRangeI(current2, width) do
         		all_pixels[index].color = color^;
         } else
-        	if inRange(current2, height) && inRange(current1, width) do
+        	if _inRangeI(current2, height) && _inRangeI(current1, width) do
         		all_pixels[index].color = color^;
         
         index += index_inc1;

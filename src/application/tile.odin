@@ -27,7 +27,8 @@ TileRow :: []Tile;
 
 TileEdge :: struct {
 	length: i32,
-	from, to, t_from, t_to: ^vec2i,
+	from, to: ^vec2i,
+	t_from, t_to: ^vec2,
 
 	color: ^Color,
 
@@ -49,16 +50,16 @@ TileMap :: struct {
 	edge_count,
 	vertex_count: i32,
 	vertices: []vec2i,
-	vertices_transformed: []vec2i,
+	vertices_transformed: []vec2,
 
 	all_rows: [MAX_TILE_MAP_HEIGHT]TileRow,
 	all_tiles: [MAX_TILE_MAP_SIZE]Tile,
 	all_edges: [MAX_TILE_MAP_EDGES]TileEdge,
 	all_vertices: [MAX_TILE_MAP_VERTICES]vec2i,
-	all_vertices_transformed: [MAX_TILE_MAP_VERTICES]vec2i
+	all_vertices_transformed: [MAX_TILE_MAP_VERTICES]vec2
 }
 
-initTile :: proc(using t: ^Tile) {
+initTile :: inline proc(using t: ^Tile) {
 	is_full = false;
 	
 	has_left_edge = false;
@@ -72,7 +73,7 @@ initTile :: proc(using t: ^Tile) {
 	right_edge = nil;
 }
 
-initTileEdge :: proc(using te: ^TileEdge) {
+initTileEdge :: inline proc(using te: ^TileEdge) {
 	length = 0;
 
 	from = nil;
@@ -121,8 +122,10 @@ EMPTY_TILE_CHARACTER :: u8('_');
 readTileMapFromASCIIgrid :: proc(using tm: ^TileMap, ascii_grid: ^string) {
 	character := EMPTY_TILE_CHARACTER;
     offset: u32 = 1;
-    current_bounds: Bounds2Di = {{0, 0}, {tile_size, tile_size}};
+    current_bounds: Bounds2Di;
     using current_bounds;
+    bottom = tile_size;
+    left = tile_size;
 
     for row, y in &tiles {
         for tile, x in &row {
@@ -134,27 +137,30 @@ readTileMapFromASCIIgrid :: proc(using tm: ^TileMap, ascii_grid: ^string) {
         	is_full = character != EMPTY_TILE_CHARACTER;
         	texture_id = is_full ? 0 : character - NUMBER_ASCII_OFFSET;
 
-            min.x += tile_size;
-			max.x += tile_size;
+            left += tile_size;
+			right += tile_size;
             offset += 1;
         }
 
-        min.x = 0;
-		max.x = tile_size;
-		min.y += tile_size;
-		max.y += tile_size;
+        left = 0;
+		right = tile_size;
+		top += tile_size;
+		bottom += tile_size;
 
         offset += 1;
     }
 }
 
 transformTileMapEdges :: proc(using tm: ^TileMap, origin: vec2i) {
-	for vertex, i in &vertices do vertices_transformed[i] = vertex - origin;
+	for vertex, i in &vertices {
+		vertices_transformed[i].x = f32(vertex.x - origin.x);
+		vertices_transformed[i].y = f32(vertex.y - origin.y);	
+	}
 	for edge in &edges {
 		using edge;
 		is_facing_forward = is_horizontal ? (
-			is_facing_down && t_from.y > 0 || is_facing_up    && t_from.y < 0) : (
-			is_facing_left && t_from.x < 0 || is_facing_right && t_from.x > 0);
+			is_facing_down && t_from.y < 0 || is_facing_up    && t_from.y > 0) : (
+			is_facing_left && t_from.x > 0 || is_facing_right && t_from.x < 0);
 		color = is_facing_forward ? &RED : &WHITE;	
 	}
 }
@@ -220,7 +226,9 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		        			vertex_id += 1;
 
 		        			from^ = position;
-		        			t_from^ = from^;
+
+		        			t_from.x = f32(from.x);
+		        			t_from.y = f32(from.y);
 		        		}
 
 		        		to = &all_vertices[vertex_id];
@@ -229,7 +237,9 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 		        		to^ = position;
 		        		to.y += tile_size;
-		        		t_to^ = to^;
+
+	        			t_to.x = f32(to.x);
+	        			t_to.y = f32(to.y);
 		        		
 		        		is_facing_left = true;
 		        	}
@@ -268,7 +278,9 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 		        			from^ = position;
 		        			from.x += tile_size;
-		        			t_from^ = from^;
+
+		        			t_from.x = f32(from.x);
+		        			t_from.y = f32(from.y);
 		        		}
 
 						to = &all_vertices[vertex_id];
@@ -278,7 +290,9 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		        		to^ = position;
 		        		to.x += tile_size;
 		        		to.y += tile_size;
-		        		t_to^ = to^;
+
+	        			t_to.x = f32(to.x);
+	        			t_to.y = f32(to.y);
 		        		
 		        		is_facing_right = true;
 		        	}
@@ -328,7 +342,9 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		        			vertex_id += 1;
 
 		        			from^ = position;
-		        			t_from^ = position;
+
+		        			t_from.x = f32(from.x);
+		        			t_from.y = f32(from.y);
 		        		}
 
 						if to == nil {
@@ -338,7 +354,9 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 		        			to^ = position;
 		        			to.x += tile_size;
-		        			t_to^ = to^;
+
+		        			t_to.x = f32(to.x);
+		        			t_to.y = f32(to.y);
 		        		}
 		        		
 		        		is_facing_up = true;
@@ -366,7 +384,9 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 	        			from^ = position;
 	        			from.y += tile_size;
-	        			t_from^ = from^;
+
+	        			t_from.x = f32(from.x);
+	        			t_from.y = f32(from.y);
 
 	        			to = &all_vertices[vertex_id];
 	        			t_to = &all_vertices_transformed[vertex_id];
@@ -375,7 +395,9 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 	        			to^ = position;
 	        			to.x += tile_size;
 	        			to.y += tile_size;
-	        			t_to^ = to^;
+
+	        			t_to.x = f32(to.x);
+	        			t_to.y = f32(to.y);
 
 		        		is_facing_down = true;
 		        		is_horizontal = true;
@@ -389,11 +411,11 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
         	}
         	
 
-	        bounds.min.x = position.x;
-	        bounds.max.x = position.x + tile_size;
+	        bounds.left = position.x;
+	        bounds.right = position.x + tile_size;
 
-	        bounds.min.y = position.y;
-	        bounds.max.y = position.y + tile_size;
+	        bounds.top = position.y;
+	        bounds.bottom = position.y + tile_size;
 
 			position.x += tile_size;
         }

@@ -4,8 +4,8 @@ package application
 
 
 
-linesRayWithEdge :: proc(a, b, c, d, p: ^Coords2D) -> bool {
-	ray_direction, edge_vector: Coords2D;
+linesRayWithEdge :: proc(a, b, c, d, p: ^vec2i) -> bool {
+	ray_direction, edge_vector: vec2i;
 
 	u := b^ - a^;
 	v := d^ - c^;
