@@ -71,9 +71,9 @@ update :: proc() {
 		new_y = i32(new_position.y);	
 		if new_x >= 0 && 
 		   new_y >= 0 && 
-		   new_x < (MAP_WIDTH * TILE_SIZE) && 
-		   new_y < (MAP_HEIGHT * TILE_SIZE) && 
-		   !tile_map[new_y / TILE_SIZE][new_x / TILE_SIZE].is_full {
+		   new_x < (tile_map.width * tile_map.tile_size) && 
+		   new_y < (tile_map.height * tile_map.tile_size) && 
+		   !tile_map.tiles[new_y / tile_map.tile_size][new_x / tile_map.tile_size].is_full {
 			position = new_position;
 			origin = {new_x, new_y};
 		}
@@ -91,23 +91,23 @@ update :: proc() {
 
 	tile_map_changed = false;
 	if left_mouse_button.is_pressed && 
-		mouse_pos.x < (MAP_WIDTH * TILE_SIZE) && 
-		mouse_pos.y < (MAP_HEIGHT * TILE_SIZE) {
+		mouse_pos.x < (tile_map.width * tile_map.tile_size) && 
+		mouse_pos.y < (tile_map.height * tile_map.tile_size) {
 
-		tile_map[mouse_pos.y / TILE_SIZE][mouse_pos.x / TILE_SIZE].is_full = true;
+		tile_map.tiles[mouse_pos.y / tile_map.tile_size][mouse_pos.x / tile_map.tile_size].is_full = true;
 		tile_map_changed = true;
 	}
 
 	if right_mouse_button.is_pressed &&
-		mouse_pos.x < (MAP_WIDTH * TILE_SIZE) && 
-		mouse_pos.y < (MAP_HEIGHT * TILE_SIZE) {
+		mouse_pos.x < (tile_map.width * tile_map.tile_size) && 
+		mouse_pos.y < (tile_map.height * tile_map.tile_size) {
 		
-		tile_map[mouse_pos.y / TILE_SIZE][mouse_pos.x / TILE_SIZE].is_full = false;
+		tile_map.tiles[mouse_pos.y / tile_map.tile_size][mouse_pos.x / tile_map.tile_size].is_full = false;
 		tile_map_changed = true;
 	}
 
-	if tile_map_changed do generateEdges();
-	if tile_map_changed || moved do transformEdges(origin);
+	if tile_map_changed do generateTileMapEdges(&tile_map);
+	if tile_map_changed || moved do transformTileMapEdges(&tile_map, origin);
 	if tile_map_changed || moved || turned do castRays();
 
 	ticks_before = getTicks();
@@ -122,18 +122,23 @@ render :: proc() {
 
 	fillRect(0, 0, width, height, &BLACK, &frame_buffer.bitmap);
 
-	for row, y in &tile_map do
+	for row, y in &tile_map.tiles do
 		for tile, x in &row do
 			if tile.is_full do fillRect(&tile.bounds, &BLUE, &frame_buffer.bitmap);
 
 	padding: vec2i = {1, 1};
 
 	for ray in &rays do drawLine(position, ray.hit.position, &GREEN, &frame_buffer.bitmap);
-	for edge in &edges {
-		drawLine(edge.from, edge.to, edge.color, &frame_buffer.bitmap);
-		fillRect(edge.from - padding, edge.from + padding, &GREEN, &frame_buffer.bitmap);
-		fillRect(edge.to   - padding, edge.to   + padding, &GREEN, &frame_buffer.bitmap);
+	for edge in &tile_map.edges {
+		using edge;
+		drawLine(from^, to^, color, &frame_buffer.bitmap);
+		print(1);
+		fillRect(from^ - padding, from^ + padding, &GREEN, &frame_buffer.bitmap);
+		print(2);
+		fillRect(to^   - padding, to^   + padding, &GREEN, &frame_buffer.bitmap);
+		print(3);
 	}
+	print(4);
 	fillCircle(position, 4, &RED, &frame_buffer.bitmap);
 
 	// bounds.min = coords - padding*2;
@@ -165,17 +170,17 @@ render :: proc() {
 
 
 initApplication :: proc(platformGetTicks: GetTicks, platformTicksPerSecond: u64) {
-	initTimers(platformGetTicks, platformTicksPerSecond);
-	initFrameBuffer(&frame_buffer);
-	initFrameBuffer(&canvas);
-	initCamera(&camera);
-	
 	using camera.xform;
 	position = 100;
 	origin = 100;
 
-	readASCIIgrid();
-	generateEdges();
-	transformEdges(origin);
+	initTimers(platformGetTicks, platformTicksPerSecond);
+	initFrameBuffer(&frame_buffer);
+	initFrameBuffer(&canvas);
+	initCamera(&camera);
+	initTileMap(&tile_map);
+	readTileMapFromASCIIgrid(&tile_map, &TILE_MAP_ASCII_GRID);
+	generateTileMapEdges(&tile_map);
+	transformTileMapEdges(&tile_map, origin);
 	UPDATE_INTERVAL = ticks_per_second / TARGET_FPS;
 }
