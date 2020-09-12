@@ -57,6 +57,8 @@ turned, moved, tile_map_changed: bool;
 stored_bounds: [dynamic]Bounds2Di;
 canvas, frame_buffer: FrameBuffer;
 
+// new_approach: bool;
+
 resize :: proc(new_width, new_height: i32) {
 	resizeFrameBuffer(new_width, new_height, &frame_buffer);
 	setRayCount(new_width);
@@ -74,6 +76,8 @@ update :: proc() {
 	ticks_diff = ticks_after - ticks_before;
 
 	amount := f32(SPEED * (f64(ticks_diff) * seconds_per_tick));
+
+	// if move_up do new_approach = !new_approach;
 
 	moved_by = 0;
 	if move_right    do moved_by.x += amount * MOVEMENT_SPEED;
@@ -161,15 +165,16 @@ render :: proc() {
 
 	padding: vec2i = {1, 1};
 
-	// for ray in &rays do drawLine(position, ray.hit.position, &GREEN, &frame_buffer.bitmap);
+	for ray in &rays do drawLine(position, ray.hit.position, &GREY, &frame_buffer.bitmap);
+	// for ray in &rays do drawLine(position, position + ray.direction*50, &GREEN, &frame_buffer.bitmap);
 	for edge in &tile_map.edges {
 		using edge;
 		drawLine(from^, to^, color, &frame_buffer.bitmap);
-		fillRect(from^ - padding, from^ + padding, &GREEN, &frame_buffer.bitmap);
-		fillRect(to^   - padding, to^   + padding, &GREEN, &frame_buffer.bitmap);
+		fillRect(from^ - padding, from^ + padding, &WHITE, &frame_buffer.bitmap);
+		fillRect(to^   - padding, to^   + padding, &WHITE, &frame_buffer.bitmap);
 	}
 	fillCircle(position, 4, &RED, &frame_buffer.bitmap);
-	
+
 	ticks_before = getTicks();
 	castRays();
 	ticks_after = getTicks();	
@@ -178,14 +183,15 @@ render :: proc() {
 
 	if (ticks_after - ticks_of_last_report) >= ticks_per_second {
 		print(
-			"Frame count:", accumulated_frame_count,
-			"Average microseconds per frame:", 
+			"Ray-Casting",
+			// new_approach ? "(new):" : "(old)",
 			u64(
 				microseconds_per_tick * (
 					f64(accumulated_ticks) / 
 					f64(accumulated_frame_count)
 				)
-			)
+			),
+			"μs/f"
 		);
 
 		accumulated_ticks = 0;

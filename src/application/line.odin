@@ -1,7 +1,7 @@
 package application
 
 _drawHLine2Di :: inline proc(from, to, at: i32, color: ^Color, using bitmap: ^Bitmap) {
-	if !_inRangeI(at, height) do return;
+	if !_inRangeI(at, height - 1) do return;
 	offset := at * width;
 	first, last := _subRangeI(from, to, width);
 	first += offset;
@@ -12,7 +12,7 @@ _drawHLine2Df :: inline proc(from, to, at: f32, color: ^Color, using bitmap: ^Bi
 drawHLine2D :: proc{_drawHLine2Di, _drawHLine2Df};
 
 _drawVLine2Di :: inline proc(from, to, at: i32, color: ^Color, using bitmap: ^Bitmap) {
-	if !inRange(at, width) do return;
+	if !inRange(at, width - 1) do return;
 	first, last := _subRangeI(from, to, height);
 	first *= width; first += at;
 	last  *= width; last  += at;
@@ -92,3 +92,75 @@ _drawLineVec2i :: inline proc(from, to: vec2i, color: ^Color, using bitmap: ^Bit
 _drawLineVec2f :: inline proc(from, to: vec2,  color: ^Color, using bitmap: ^Bitmap) do _drawLine2Df(from.x, from.y, to.x, to.y, color, bitmap);
 
 drawLine :: proc{_drawLine2Di, _drawLine2Df, _drawLineVec2i, _drawLineVec2f};
+
+_lineSegmentsIntersectVec2 :: proc(A, B, C, D: vec2, P: ^vec2) -> bool {
+    AB := B - A;
+    CD := D - C;
+
+    d := cross(AB, CD);
+    if d != 0 {
+        CA := A - C;
+        s := cross(AB, CA);
+        t := cross(CD, CA);
+
+        if inRange(s, d) && 
+           inRange(t, d) {       
+            P^ = A + AB*t/d;
+            return true;
+        }
+    }
+
+    return false;
+}
+_lineSegmentsIntersectVecF :: proc(Ax, Ay, Bx, By, Cx, Cy, Dx, Dy: f32, Px, Py: ^f32) -> bool {
+    ABx := Bx - Ax;     
+    ABy := By - Ay;
+    
+    CDx := Dx - Cx;     
+    CDy := Dy - Cy;
+
+    d := ABx*CDy - ABy*CDx;
+    if d != 0 {
+        CAx := Ax - Cx;
+        CAy := Ay - Cy;
+
+        s := ABx*CAy - ABy*CAx;
+        t := CDx*CAy - CDy*CAx;
+
+        if inRange(s, d) && 
+           inRange(t, d) {
+            t /= d;
+            Px^ = Ax + ABx*t;
+            Py^ = Ay + ABy*t;
+            return true;
+        }    
+    }
+
+    return false;
+}
+_lineSegmentsIntersectVecI :: proc(Ax, Ay, Bx, By, Cx, Cy, Dx, Dy: i32, Px, Py: ^i32) -> bool {
+    ABx := Bx - Ax;     
+    ABy := By - Ay;
+    
+    CDx := Dx - Cx;     
+    CDy := Dy - Cy;
+
+    d := ABx*CDy - ABy*CDx;
+    if d != 0 {
+        CAx := Ax - Cx;
+        CAy := Ay - Cy;
+
+        s := ABx*CAy - ABy*CAx;
+        t := CDx*CAy - CDy*CAx;
+
+        if inRange(s, d) && 
+           inRange(t, d) {
+            t_over_d := i32(f32(t)/f32(d));
+            Px^ = Ax + ABx*t_over_d;
+            Py^ = Ay + ABy*t_over_d;
+            return true;
+        }    
+    }
+
+    return false;
+}

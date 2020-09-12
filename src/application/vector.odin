@@ -16,6 +16,9 @@ dot3 :: inline proc(a, b: vec3) -> f32 do return a.x*b.x + a.y*b.y + a.z*b.z;
 dot4 :: inline proc(a, b: vec4) -> f32 do return a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w;
 dot :: proc{dot2, dot3, dot4};
 
+cross2 :: inline proc(a, b: vec2) -> f32 do return a.x*b.y - a.y*b.x;
+cross :: proc{cross2};
+
 squared_length2 :: inline proc(v: vec2) -> f32 do return dot2(v, v);
 squared_length3 :: inline proc(v: vec3) -> f32 do return dot3(v, v);
 squared_length4 :: inline proc(v: vec4) -> f32 do return dot4(v, v);

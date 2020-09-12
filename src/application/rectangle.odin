@@ -57,3 +57,38 @@ fillRect2Di :: inline proc(using r: ^Rect2Di, color: ^Color, bitmap: ^Bitmap) do
 fillRectByVec2fPair :: inline proc(a, b: vec2,  color: ^Color, using bitmap: ^Bitmap) do _fillRect2Df(a.x, a.y, b.x, b.y, color, bitmap);
 fillRectByVec2iPair :: inline proc(a, b: vec2i, color: ^Color, using bitmap: ^Bitmap) do _fillRect2Di(a.x, a.y, b.x, b.y, color, bitmap);
 fillRect :: proc{_fillRect2Di, _fillRect2Df, fillRect2Df, fillRect2Di, fillBounds2Df, fillBounds2Di, fillRectByVec2fPair, fillRectByVec2iPair};
+
+_areCompRectBoundsOverlappingF :: inline proc(
+	a_min_x, a_min_y, a_max_x, a_max_y,
+	b_min_x, b_min_y, b_max_x, b_max_y: f32
+) -> bool do return !(
+	a_min_x < b_max_x || a_max_x > b_min_x ||
+	a_min_y < b_max_y || a_max_y > b_min_y	
+);
+_areCompRectBoundsOverlappingI :: inline proc(
+	a_min_x, a_min_y, a_max_x, a_max_y,
+	b_min_x, b_min_y, b_max_x, b_max_y: i32
+) -> bool do return !(
+	a_min_x < b_max_x || a_max_x > b_min_x ||
+	a_min_y < b_max_y || a_max_y > b_min_y	
+);
+_areBoundsOverlappingVec2i :: inline proc(a_min, a_max, b_min, b_max: vec2i) -> bool do 
+	return _areCompRectBoundsOverlappingI(a_min.x, a_min.y, a_max.x, a_max.y,
+		                                  b_min.x, b_min.y, b_max.x, b_max.y);
+_areBoundsOverlappingVec2f :: inline proc(a_min, a_max, b_min, b_max: vec2) -> bool do 
+	return _areCompRectBoundsOverlappingF(a_min.x, a_min.y, a_max.x, a_max.y,
+		                                  b_min.x, b_min.y, b_max.x, b_max.y);
+areBoundsOverlappingI :: inline proc(a, b: Bounds2Di) -> bool do return _areBoundsOverlappingVec2i(a.min, a.max, b.min, b.max);
+areBoundsOverlappingF :: inline proc(a, b: Bounds2Df) -> bool do return _areBoundsOverlappingVec2f(a.min, a.max, b.min, b.max);
+areRectsOverlappingI  :: inline proc(a, b: Rect2Di  ) -> bool do return _areBoundsOverlappingVec2i(a.min, a.max, b.min, b.max);
+areRectsOverlappingF  :: inline proc(a, b: Rect2Df  ) -> bool do return _areBoundsOverlappingVec2f(a.min, a.max, b.min, b.max);
+areRectsOverlapping :: proc{
+	_areCompRectBoundsOverlappingF,
+	_areCompRectBoundsOverlappingI,
+	_areBoundsOverlappingVec2i,
+	_areBoundsOverlappingVec2f,
+	areBoundsOverlappingI,
+	areBoundsOverlappingF,
+	areRectsOverlappingI,
+	areRectsOverlappingF
+};
