@@ -1,11 +1,11 @@
 package application
 
-_drawCircle2Di :: inline proc(Px, Py, R: i32, color: ^Color, using bitmap: ^Bitmap) {
+_drawCircle2Di :: inline proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitmap) {
 	x, y, y2: i32;
 	r2 := R * R;
 	x2 := r2;
 	x = R;
-	c := color^;
+	c := color;
 	
 	Sx1 := Px - R;
 	Ex1 := Px + R;
@@ -57,17 +57,17 @@ _drawCircle2Di :: inline proc(Px, Py, R: i32, color: ^Color, using bitmap: ^Bitm
 		Ex2 += 1;
 	}
 }
-_drawCircle2Df :: inline proc(Px, Py, R: f32, color: ^Color, using bitmap: ^Bitmap) do _drawCircle2Di(i32(Px), i32(Py), i32(R), color, bitmap);
-_drawCircle2DVec2i :: inline proc(pos: vec2i, R: i32, color: ^Color, using bitmap: ^Bitmap) do _drawCircle2Di(pos.x, pos.y, R, color, bitmap);
-_drawCircle2DVec2f :: inline proc(pos: vec2,  R: f32, color: ^Color, using bitmap: ^Bitmap) do _drawCircle2Df(pos.x, pos.y, R, color, bitmap);
+_drawCircle2Df :: inline proc(Px, Py, R: f32, color: Color, using bitmap: ^Bitmap) do _drawCircle2Di(i32(Px), i32(Py), i32(R), color, bitmap);
+_drawCircle2DVec2i :: inline proc(pos: vec2i, R: i32, color: Color, using bitmap: ^Bitmap) do _drawCircle2Di(pos.x, pos.y, R, color, bitmap);
+_drawCircle2DVec2f :: inline proc(pos: vec2,  R: f32, color: Color, using bitmap: ^Bitmap) do _drawCircle2Df(pos.x, pos.y, R, color, bitmap);
 drawCircle :: proc{_drawCircle2Di, _drawCircle2Df, _drawCircle2DVec2i, _drawCircle2DVec2f};
 
-_fillCircle2Di :: inline proc(Px, Py, R: i32, color: ^Color, using bitmap: ^Bitmap) {
+_fillCircle2Di :: inline proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitmap) {
 	x, y, y2: i32;
 	r2 := R * R;
 	x2 := r2;
 	x = R;
-	c := color^;
+	c := color;
 	
 	Sx1 := Px - R;
 	Ex1 := Px + R;
@@ -107,17 +107,17 @@ _fillCircle2Di :: inline proc(Px, Py, R: i32, color: ^Color, using bitmap: ^Bitm
 		Ex2 += 1;
 	}
 }
-_fillCircle2Df :: inline proc(Px, Py, R: f32, color: ^Color, using bitmap: ^Bitmap) do _fillCircle2Di(i32(Px), i32(Py), i32(R), color, bitmap);
-_fillCircle2DVec2i :: inline proc(pos: vec2i, R: i32, color: ^Color, using bitmap: ^Bitmap) do _fillCircle2Di(pos.x, pos.y, R, color, bitmap);
-_fillCircle2DVec2f :: inline proc(pos: vec2,  R: f32, color: ^Color, using bitmap: ^Bitmap) do _fillCircle2Df(pos.x, pos.y, R, color, bitmap);
+_fillCircle2Df :: inline proc(Px, Py, R: f32, color: Color, using bitmap: ^Bitmap) do _fillCircle2Di(i32(Px), i32(Py), i32(R), color, bitmap);
+_fillCircle2DVec2i :: inline proc(pos: vec2i, R: i32, color: Color, using bitmap: ^Bitmap) do _fillCircle2Di(pos.x, pos.y, R, color, bitmap);
+_fillCircle2DVec2f :: inline proc(pos: vec2,  R: f32, color: Color, using bitmap: ^Bitmap) do _fillCircle2Df(pos.x, pos.y, R, color, bitmap);
 fillCircle :: proc{_fillCircle2Di, _fillCircle2Df, _fillCircle2DVec2i, _fillCircle2DVec2f};
 
-drawCircleUnsafe :: proc(Px, Py, R: i32, color: ^Color, using bitmap: ^Bitmap) {
+drawCircleUnsafe :: proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitmap) {
 	x, y, y2: i32;
 	r2 := R * R;
 	x2 := r2;
 	x = R;
-	c := color^;
+	c := color;
 	
 	Sx1 := Px - R;
 	Ex1 := Px + R;
@@ -165,12 +165,12 @@ drawCircleUnsafe :: proc(Px, Py, R: i32, color: ^Color, using bitmap: ^Bitmap) {
 	}
 }
 
-fillCircleUnsafe :: proc(Px, Py, R: i32, color: ^Color, using bitmap: ^Bitmap) {
+fillCircleUnsafe :: proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitmap) {
 	x, y, y2: i32;
 	r2 := R * R;
 	x2 := r2;
 	x = R;
-	c := color^;
+	c := color;
 	
 	Sx1 := Px - R;
 	Ex1 := Px + R;
@@ -215,7 +215,7 @@ fillCircleUnsafe :: proc(Px, Py, R: i32, color: ^Color, using bitmap: ^Bitmap) {
 }
 
 
-drawCircle2 :: proc(pos: vec2i, radius: i32, color: ^Color, using bitmap: ^Bitmap) {
+drawCircle2 :: proc(pos: vec2i, radius: i32, color: Color, using bitmap: ^Bitmap) {
 	right := pos.x + radius;
 	left  := pos.x - radius;
 
@@ -242,13 +242,13 @@ drawCircle2 :: proc(pos: vec2i, radius: i32, color: ^Color, using bitmap: ^Bitma
 		bottom_in_range = bottom >= 0 && bottom < height;
 
 		if right_in_range {
-	   		if top_in_range    do pixels[top   ][right].color = color^;
-	   		if bottom_in_range do pixels[bottom][right].color = color^;
+	   		if top_in_range    do pixels[top   ][right].color = color;
+	   		if bottom_in_range do pixels[bottom][right].color = color;
 	   	}
 
 		if left_in_range {
-	   		if top_in_range    do pixels[top   ][left].color = color^;
-	   		if bottom_in_range do pixels[bottom][left].color = color^;
+	   		if top_in_range    do pixels[top   ][left].color = color;
+	   		if bottom_in_range do pixels[bottom][left].color = color;
 	   	}
 
 	   	// Rotate 90 deg.
@@ -263,13 +263,13 @@ drawCircle2 :: proc(pos: vec2i, radius: i32, color: ^Color, using bitmap: ^Bitma
 		bottom_in_range = r_bottom >= 0 && r_bottom < height;
 
 		if top_in_range {
-	   		if right_in_range do pixels[r_top][r_right].color = color^;
-	   		if left_in_range  do pixels[r_top][r_left ].color = color^;
+	   		if right_in_range do pixels[r_top][r_right].color = color;
+	   		if left_in_range  do pixels[r_top][r_left ].color = color;
 	   	}
 
 		if bottom_in_range {
-	   		if right_in_range do pixels[r_bottom][r_right].color = color^;
-	   		if left_in_range  do pixels[r_bottom][r_left ].color = color^;
+	   		if right_in_range do pixels[r_bottom][r_right].color = color;
+	   		if left_in_range  do pixels[r_bottom][r_left ].color = color;
 	   	}
 
 		if x2 + y*y > r2 {

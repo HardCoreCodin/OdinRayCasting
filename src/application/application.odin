@@ -67,7 +67,42 @@ resize :: proc(new_width, new_height: i32) {
 	update();	
 }
 
+selected: i32;
+intersected: bool;
 update :: proc() {
+	if !left_mouse_button.is_pressed {
+		selected = 0;
+		return;
+	}
+
+	pos: vec2 = {
+		f32(mouse_pos.x), 
+		f32(mouse_pos.y)
+	};
+
+	switch selected {
+		case 0:
+			if inRange(A.x - R, pos.x, A.x + R) &&
+			   inRange(A.y - R, pos.y, A.y + R) do selected = 1; else 
+			if inRange(B.x - R, pos.x, B.x + R) &&
+			   inRange(B.y - R, pos.y, B.y + R) do selected = 2; else
+			if inRange(C.x - R, pos.x, C.x + R) &&
+			   inRange(C.y - R, pos.y, C.y + R) do selected = 3; else
+			if inRange(D.x - R, pos.x, D.x + R) &&
+			   inRange(D.y - R, pos.y, D.y + R) do selected = 4;
+		case 1: A = pos;
+		case 2: B = pos;
+		case 3: C = pos;
+		case 4: D = pos;
+	}
+
+	if mouse_moved && selected != 0 {
+		mouse_moved = false;
+		intersected = lineSegmentsIntersect(A, B, C, D, &P);
+	}
+}
+
+update2 :: proc() {
 	using frame_buffer;
 	using update_timer;
 	using camera.xform;
@@ -151,33 +186,54 @@ update :: proc() {
 	ticks_before = getTicks();
 }
 
+
+A: vec2 = {100, 120};
+B: vec2 = {450, 380};
+C: vec2 = {320, 120};
+D: vec2 = {410, 370};
+P: vec2;
+R: f32 = 5;
+
 render :: proc() {
+	using camera.xform;
+	using frame_buffer;
+	fillRect(0, 0, width, height, BLACK, &bitmap);
+	drawLine(A, B, WHITE, &bitmap);
+	drawLine(C, D, WHITE, &bitmap);
+	fillCircle(A, R, GREY, &bitmap);
+	fillCircle(B, R, YELLOW, &bitmap);
+	fillCircle(C, R, BLUE, &bitmap);
+	fillCircle(D, R, GREEN, &bitmap);
+	if intersected do
+		fillCircle(P, R, RED, &bitmap);	
+}
+
+render2 :: proc() {
 	using render_timer;
 	using camera.xform;
 	using frame_buffer;
-
-
-	fillRect(0, 0, width, height, &BLACK, &frame_buffer.bitmap);
-
-	for row, y in &tile_map.tiles do
-		for tile, x in &row do
-			if tile.is_full do fillRect(&tile.bounds, &BLUE, &frame_buffer.bitmap);
-
-	padding: vec2i = {1, 1};
-
-	for ray in &rays do drawLine(position, ray.hit.position, &GREY, &frame_buffer.bitmap);
-	// for ray in &rays do drawLine(position, position + ray.direction*50, &GREEN, &frame_buffer.bitmap);
-	for edge in &tile_map.edges {
-		using edge;
-		drawLine(from^, to^, color, &frame_buffer.bitmap);
-		fillRect(from^ - padding, from^ + padding, &WHITE, &frame_buffer.bitmap);
-		fillRect(to^   - padding, to^   + padding, &WHITE, &frame_buffer.bitmap);
-	}
-	fillCircle(position, 4, &RED, &frame_buffer.bitmap);
-
 	ticks_before = getTicks();
 	castRays();
 	ticks_after = getTicks();	
+
+	fillRect(0, 0, width, height, BLACK, &bitmap);
+	drawWalls(&camera);
+
+	for row, y in &tile_map.tiles do
+		for tile, x in &row do
+			if tile.is_full do fillRect(&tile.bounds, BLUE, &bitmap);
+
+	padding: vec2i = {1, 1};
+
+	for ray in &rays do drawLine(position, ray.hit.position, GREY, &bitmap);
+	// for ray in &rays do drawLine(position, position + ray.direction*50, GREEN, &bitmap);
+	for edge in &tile_map.edges {
+		using edge;
+		drawLine(from^, to^, color, &bitmap);
+		fillRect(from^ - padding, from^ + padding, WHITE, &bitmap);
+		fillRect(to^   - padding, to^   + padding, WHITE, &bitmap);
+	}
+	fillCircle(position, 4, RED, &bitmap);
 
 	accumulateTimer(&render_timer);
 
@@ -205,7 +261,8 @@ initApplication :: proc(platformGetTicks: GetTicks, platformTicksPerSecond: u64)
 	using camera.xform;
 	position = 100;
 	origin = 100;
-
+	intersected = lineSegmentsIntersect(A, B, C, D, &P);
+	// loadTextures();
 	initTimers(platformGetTicks, platformTicksPerSecond);
 	initFrameBuffer(&frame_buffer);
 	initFrameBuffer(&canvas);

@@ -11,6 +11,8 @@ non_zero3 :: inline proc(v: vec3) -> bool do return v.x != 0 || v.y != 0 || v.z 
 non_zero4 :: inline proc(v: vec4) -> bool do return v.x != 0 || v.y != 0 || v.z != 0 || v.w != 0;
 non_zero :: proc{non_zero2, non_zero3, non_zero4};
 
+perp :: inline proc(v: vec2) -> vec2 do return vec2{-v.y, v.x};
+
 dot2 :: inline proc(a, b: vec2) -> f32 do return a.x*b.x + a.y*b.y;
 dot3 :: inline proc(a, b: vec3) -> f32 do return a.x*b.x + a.y*b.y + a.z*b.z;
 dot4 :: inline proc(a, b: vec4) -> f32 do return a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w;

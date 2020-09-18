@@ -33,12 +33,12 @@ rayIntersectsWithEdge :: proc(ray: ^Ray, edge: ^TileEdge, pos: ^vec2) -> bool {
         if ray.is_horizontal || (is_below && ray.is_facing_up) || (is_above && ray.is_facing_down) do return false;
         pos.y = to.y;
         pos.x = to.y * ray.run_over_rise;
-        return inRange(pos.x, to.x, from.x);
+        return inRange(from.x, pos.x, to.x);
     } else { // Edge is vertical:
         if ray.is_vertical || (is_left && ray.is_facing_right) || (is_right && ray.is_facing_left) do return false;
         pos.x = to.x;
         pos.y = to.x * ray.rise_over_run;
-        return inRange(pos.y, to.y, from.y);
+        return inRange(from.y, pos.y, to.y);
     }
 }
 
@@ -50,6 +50,7 @@ castRay :: proc(using ray: ^Ray) {
         current.distance_squared = squared_length(current.position);
         if current.distance_squared < closest.distance_squared do closest = current;
     }
+    // hit.position = closest.position;
     hit.position = closest.position + origin^;
     hit.distance = sqrt(closest.distance_squared);   
 }
@@ -88,6 +89,66 @@ castRays :: inline proc() {
     // for ray in &rays do castRayWolf3D(&ray);
 }
 
+CEILING_COLOR: Color = {
+    R = 44,
+    G = 44,
+    B = 44
+};
+FLOOR_COLOR: Color = {
+    R = 88,
+    G = 88,
+    B = 88
+};
+
+drawWalls :: proc(using cam: ^Camera2D) {
+    using xform;
+    using frame_buffer;
+
+    u, v,
+    top, bottom, 
+    pixel_offset,
+    column_height: i32;
+
+    texel_height,
+    distance: f32;
+    tiles_to_projection_plane := f32(tile_map.tile_size) * f32(width) * focal_length;
+    
+    x: i32;
+    for ray in &rays {
+        using ray;
+
+        // get the perpendicular distance to the wall to fix fishbowl distortion
+        distance = dot(hit.position - position, forward_direction^);
+        if distance < 0 do distance = -distance;
+        // projected wall height
+
+        column_height = i32(tiles_to_projection_plane / distance);
+
+        top    = column_height < height ? (height - column_height) / 2 : 0;
+        bottom = column_height < height ? (height + column_height) / 2 : height;
+
+        // Draw the floor and ceiling
+        drawVLine2D(0     , top   , x, CEILING_COLOR, &bitmap);
+        drawVLine2D(bottom, height, x, FLOOR_COLOR  , &bitmap);
+
+        texel_height = TEXTURE_HEIGHT / f32(column_height);
+        u = (hit.is_vertical ? i32(hit.position.y) : i32(hit.position.x)) % TEXTURE_WIDTH;
+        v = top + (column_height - height) / 2;
+        
+        // render the wall
+        pixel_offset = top * width + x;
+        for y in top..<bottom {
+            all_pixels[pixel_offset].color = textures[0][TEXTURE_WIDTH * i32(texel_height * f32(v)) + u];
+
+            pixel_offset += width;
+            v += 1;
+        }
+
+        x += 1;
+    }
+}
+    
+
 // castRayWolf3D :: proc(using ray: ^Ray) {
 //     size := f32(tile_map.tile_size);
 //     factor :=  1 / size;
@@ -119,8 +180,8 @@ castRays :: inline proc() {
 //         x = i32(factor * (dec_x ? (position.x - 1) : position.x));
 //         y = i32(factor * (dec_y ? (position.y - 1) : position.y));
 
-//         if inRange(x, end_x) && 
-//            inRange(y, end_y) {
+//         if inRange(0, x, end_x) && 
+//            inRange(0, y, end_y) {
 //             tile = &tile_map.tiles[y][x];
 //             if tile.is_full {
 //                 texture_id = tile.texture_id;

@@ -1,27 +1,27 @@
 package application
 
-_drawHLine2Di :: inline proc(from, to, at: i32, color: ^Color, using bitmap: ^Bitmap) {
-	if !_inRangeI(at, height - 1) do return;
+_drawHLine2Di :: inline proc(from, to, at: i32, color: Color, using bitmap: ^Bitmap) {
+	if !_inRangeI(0, at, height - 1) do return;
 	offset := at * width;
 	first, last := _subRangeI(from, to, width);
 	first += offset;
 	last += offset;
-	for i in first..last do all_pixels[i].color = color^;
+	for i in first..last do all_pixels[i].color = color;
 };
-_drawHLine2Df :: inline proc(from, to, at: f32, color: ^Color, using bitmap: ^Bitmap) do _drawHLine2Di(i32(from), i32(to), i32(at), color, bitmap);
+_drawHLine2Df :: inline proc(from, to, at: f32, color: Color, using bitmap: ^Bitmap) do _drawHLine2Di(i32(from), i32(to), i32(at), color, bitmap);
 drawHLine2D :: proc{_drawHLine2Di, _drawHLine2Df};
 
-_drawVLine2Di :: inline proc(from, to, at: i32, color: ^Color, using bitmap: ^Bitmap) {
-	if !inRange(at, width - 1) do return;
+_drawVLine2Di :: inline proc(from, to, at: i32, color: Color, using bitmap: ^Bitmap) {
+	if !inRange(0, at, width - 1) do return;
 	first, last := _subRangeI(from, to, height);
 	first *= width; first += at;
 	last  *= width; last  += at;
-	for i := first; i <= last; i += width do all_pixels[i].color = color^;
+	for i := first; i <= last; i += width do all_pixels[i].color = color;
 }
-_drawVLine2Df :: inline proc(from, to, at: f32, color: ^Color, using bitmap: ^Bitmap) do _drawVLine2Di(i32(from), i32(to), i32(at), color, bitmap);
+_drawVLine2Df :: inline proc(from, to, at: f32, color: Color, using bitmap: ^Bitmap) do _drawVLine2Di(i32(from), i32(to), i32(at), color, bitmap);
 drawVLine2D :: proc{_drawVLine2Di, _drawVLine2Df};
 
-_drawLine2Di :: inline proc(x0, y0, x1, y1: i32, color: ^Color, using bitmap: ^Bitmap) {
+_drawLine2Di :: inline proc(x0, y0, x1, y1: i32, color: Color, using bitmap: ^Bitmap) {
 	if x0 == x1 {
 		_drawVLine2Di(y0, y1, x1, color, bitmap);
 		return;
@@ -72,11 +72,11 @@ _drawLine2Di :: inline proc(x0, y0, x1, y1: i32, color: ^Color, using bitmap: ^B
     for current1 != end {
         current1 += inc1;
         if is_steap {
-        	if _inRangeI(current1, height) && _inRangeI(current2, width) do
-        		all_pixels[index].color = color^;
+        	if _inRangeI(0, current1, height) && _inRangeI(0, current2, width) do
+        		all_pixels[index].color = color;
         } else
-        	if _inRangeI(current2, height) && _inRangeI(current1, width) do
-        		all_pixels[index].color = color^;
+        	if _inRangeI(0, current2, height) && _inRangeI(0, current1, width) do
+        		all_pixels[index].color = color;
         
         index += index_inc1;
         error += error_inc;
@@ -87,80 +87,31 @@ _drawLine2Di :: inline proc(x0, y0, x1, y1: i32, color: ^Color, using bitmap: ^B
         }
     }
 }
-_drawLine2Df :: inline proc(x0, y0, x1, y1: f32, color: ^Color, using bitmap: ^Bitmap) do _drawLine2Di(i32(x0), i32(y0), i32(x1), i32(y1), color, bitmap);
-_drawLineVec2i :: inline proc(from, to: vec2i, color: ^Color, using bitmap: ^Bitmap) do _drawLine2Di(from.x, from.y, to.x, to.y, color, bitmap);
-_drawLineVec2f :: inline proc(from, to: vec2,  color: ^Color, using bitmap: ^Bitmap) do _drawLine2Df(from.x, from.y, to.x, to.y, color, bitmap);
+_drawLine2Df :: inline proc(x0, y0, x1, y1: f32, color: Color, using bitmap: ^Bitmap) do _drawLine2Di(i32(x0), i32(y0), i32(x1), i32(y1), color, bitmap);
+_drawLineVec2i :: inline proc(from, to: vec2i, color: Color, using bitmap: ^Bitmap) do _drawLine2Di(from.x, from.y, to.x, to.y, color, bitmap);
+_drawLineVec2f :: inline proc(from, to: vec2,  color: Color, using bitmap: ^Bitmap) do _drawLine2Df(from.x, from.y, to.x, to.y, color, bitmap);
 
 drawLine :: proc{_drawLine2Di, _drawLine2Df, _drawLineVec2i, _drawLineVec2f};
 
-_lineSegmentsIntersectVec2 :: proc(A, B, C, D: vec2, P: ^vec2) -> bool {
-    AB := B - A;
+lineSegmentsIntersect :: proc(A, B, C, D: vec2, P: ^vec2) -> bool {
     CD := D - C;
-
-    d := cross(AB, CD);
-    if d != 0 {
-        CA := A - C;
-        s := cross(AB, CA);
-        t := cross(CD, CA);
-
-        if inRange(s, d) && 
-           inRange(t, d) {       
-            P^ = A + AB*t/d;
-            return true;
-        }
-    }
-
-    return false;
-}
-_lineSegmentsIntersectVecF :: proc(Ax, Ay, Bx, By, Cx, Cy, Dx, Dy: f32, Px, Py: ^f32) -> bool {
-    ABx := Bx - Ax;     
-    ABy := By - Ay;
+    AB := B - A;
+    AB_ := perp(AB);
+    ABxCD := dot(CD, AB_); 
     
-    CDx := Dx - Cx;     
-    CDy := Dy - Cy;
-
-    d := ABx*CDy - ABy*CDx;
-    if d != 0 {
-        CAx := Ax - Cx;
-        CAy := Ay - Cy;
-
-        s := ABx*CAy - ABy*CAx;
-        t := CDx*CAy - CDy*CAx;
-
-        if inRange(s, d) && 
-           inRange(t, d) {
-            t /= d;
-            Px^ = Ax + ABx*t;
-            Py^ = Ay + ABy*t;
-            return true;
-        }    
-    }
-
-    return false;
-}
-_lineSegmentsIntersectVecI :: proc(Ax, Ay, Bx, By, Cx, Cy, Dx, Dy: i32, Px, Py: ^i32) -> bool {
-    ABx := Bx - Ax;     
-    ABy := By - Ay;
+    start, end: f32;
+         if ABxCD > 0 do   end = ABxCD; 
+    else if ABxCD < 0 do start = ABxCD; 
+    else do return false; 
     
-    CDx := Dx - Cx;     
-    CDy := Dy - Cy;
+    CA := A - C;
+    s := dot(CA, AB_); 
+    if !inRange(start, s, end) do return false;
+    
+    CD_ := perp(CD);
+    t := dot(CA, CD_); 
+    if !inRange(start, t, end) do return false;
 
-    d := ABx*CDy - ABy*CDx;
-    if d != 0 {
-        CAx := Ax - Cx;
-        CAy := Ay - Cy;
-
-        s := ABx*CAy - ABy*CAx;
-        t := CDx*CAy - CDy*CAx;
-
-        if inRange(s, d) && 
-           inRange(t, d) {
-            t_over_d := i32(f32(t)/f32(d));
-            Px^ = Ax + ABx*t_over_d;
-            Py^ = Ay + ABy*t_over_d;
-            return true;
-        }    
-    }
-
-    return false;
+    P^ = A + AB*t/ABxCD;
+    return true;
 }

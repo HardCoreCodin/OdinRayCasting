@@ -36,7 +36,7 @@ TileEdge :: struct {
 		is_right: bool	
 	},
 	from, to: ^vec2i,
-	color: ^Color,
+	color: Color,
 
 	is_visible,
 	is_horizontal,
@@ -91,7 +91,7 @@ initTileEdge :: inline proc(using te: ^TileEdge) {
 
 	from = nil;
 	to = nil;
-	color = nil;
+	color = WHITE;
 
 	is_visible = false;
 	is_horizontal = false;
@@ -178,7 +178,7 @@ transformTileMapEdges :: proc(using tm: ^TileMap, origin: vec2i) {
 		edge.is_facing_forward = edge.is_horizontal ? 
 			(edge.is_facing_down && is_above || edge.is_facing_up    && is_below):
 			(edge.is_facing_left && is_right || edge.is_facing_right && is_left );
-		edge.color = edge.is_facing_forward ? &YELLOW : &RED;
+		edge.color = edge.is_facing_forward ? YELLOW : RED;
 	}
 }
 
@@ -230,7 +230,7 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 						edge_id += 1;
 
 						using left_edge;
-		        		color = &WHITE;
+		        		color = WHITE;
 		        		length = tile_size;
 
 		        		from = nil;
@@ -281,7 +281,7 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 						edge_id += 1;
 
 						using right_edge;
-		        		color = &WHITE;
+		        		color = WHITE;
 		        		length = tile_size;
 
 						from = nil;
@@ -334,7 +334,7 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 						edge_id += 1;
 
 						using top_edge;
-		        		color = &WHITE;
+		        		color = WHITE;
 		        		length = tile_size;
 
 						from = nil;
@@ -400,7 +400,7 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 						edge_id += 1;
 
 						using bottom_edge;
-		        		color = &WHITE;
+		        		color = WHITE;
 		        		length = tile_size;
 
 	        			from = &all_vertices[vertex_id];

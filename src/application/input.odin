@@ -42,7 +42,8 @@ right_mouse_button,
 left_mouse_button: MouseButton;
 mouse_pos,
 mouse_pos_diff: vec2i;
-mouse_is_captured: bool;
+mouse_moved,
+mouse_is_captured,
 mouse_wheel_scrolled: bool;
 mouse_wheel_scroll_amount: i16;
 
@@ -75,4 +76,5 @@ setMousePosition :: proc(x, y: i32) {
 setMouseMovement :: proc(x, y: i32) {
 	mouse_pos_diff.x = x;
 	mouse_pos_diff.y = y;
+	mouse_moved = true;
 }

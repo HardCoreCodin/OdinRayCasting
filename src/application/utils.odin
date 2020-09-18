@@ -3,8 +3,8 @@ package application
 Size2Df :: struct {width, height: f32}
 Size2Di :: struct {width, height: i32}
 
-_inRangeI :: inline proc(value, end: i32, start: i32 = 0) -> bool do return value >= start && value <= end;
-_inRangeF :: inline proc(value, end: f32, start: f32 = 0) -> bool do return value >= start && value <= end;
+_inRangeI :: inline proc(start, value, end: i32) -> bool do return value >= start && value <= end;
+_inRangeF :: inline proc(start, value, end: f32) -> bool do return value >= start && value <= end;
 inRange :: proc{_inRangeI, _inRangeF};
 
 _subRangeI :: inline proc(from, to, end: i32, start: i32 = 0) -> (first, last: i32) {
