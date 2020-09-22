@@ -1,10 +1,14 @@
 package application
 
+// import "../textures"
+
 RayHit :: struct {
-    is_vertical: bool,
-    texture_id: u8,
-    distance: f32,
-    position: vec2
+    position: vec2,
+    distance,
+    edge_fraction,
+    tile_fraction: f32,
+    tile: ^Tile,
+    edge: ^TileEdge
 }
 Ray :: struct {
     origin: ^vec2,
@@ -22,37 +26,54 @@ Ray :: struct {
 
     hit: RayHit
 }
-horizontal_hit: RayHit;
-vertical_hit: RayHit = {is_vertical=true};
-all_rays: [MAX_WIDTH]Ray;
+all_rays: [MAX_BITMAP_WIDTH]Ray;
 rays: []Ray;
 
-rayIntersectsWithEdge :: proc(ray: ^Ray, edge: ^TileEdge, pos: ^vec2) -> bool {
+rayIntersectsWithEdge :: proc(ray: ^Ray, edge: ^TileEdge, hit: ^RayHit) -> bool {
+    hit.edge = edge;
     using edge.local;
-    if edge.is_horizontal {
-        if ray.is_horizontal || (is_below && ray.is_facing_up) || (is_above && ray.is_facing_down) do return false;
-        pos.y = to.y;
-        pos.x = to.y * ray.run_over_rise;
-        return inRange(from.x, pos.x, to.x);
-    } else { // Edge is vertical:
+
+    if edge.is_vertical {
         if ray.is_vertical || (is_left && ray.is_facing_right) || (is_right && ray.is_facing_left) do return false;
-        pos.x = to.x;
-        pos.y = to.x * ray.rise_over_run;
-        return inRange(from.y, pos.y, to.y);
+        hit.position = to.x;
+        hit.position.y *= ray.rise_over_run;
+        return inRange(from.y, hit.position.y, to.y);
+    } else { // Edge is horizontal:
+        if ray.is_horizontal || (is_below && ray.is_facing_up) || (is_above && ray.is_facing_down) do return false;
+        hit.position = to.y;
+        hit.position.x *= ray.run_over_rise;
+        return inRange(from.x, hit.position.x, to.x);
     }
+
+    return false;
 }
 
-HitInfo :: struct {distance_squared: f32, position: vec2};
 castRay :: proc(using ray: ^Ray) {
-    closest, current: HitInfo;
-    closest.distance_squared = 1000000;
-    for edge in &tile_map.edges do if edge.is_facing_forward && rayIntersectsWithEdge(ray, &edge, &current.position) {
-        current.distance_squared = squared_length(current.position);
-        if current.distance_squared < closest.distance_squared do closest = current;
+    closest_hit, current_hit: RayHit;
+    closest_hit.distance = 1000000;
+    for edge in &tile_map.edges do if edge.is_facing_forward && rayIntersectsWithEdge(ray, &edge, &current_hit) {
+        current_hit.distance = squared_length(current_hit.position);
+        if current_hit.distance < closest_hit.distance do closest_hit = current_hit;
     }
-    // hit.position = closest.position;
-    hit.position = closest.position + origin^;
-    hit.distance = sqrt(closest.distance_squared);   
+    hit = closest_hit;
+    using hit;
+    position += origin^;
+    distance = sqrt(distance);
+
+    tile_index: vec2i = {
+        i32(position.x),
+        i32(position.y)
+    };
+    if edge.is_vertical {
+        edge_fraction = position.y - f32(edge.from.y);
+        if edge.is_facing_right do tile_index.x -= 1;
+    } else {
+        edge_fraction = position.x - f32(edge.from.x);
+        if edge.is_facing_down do tile_index.y -= 1;
+    }
+
+    tile = &tile_map.tiles[tile_index.y][tile_index.x];
+    tile_fraction = edge_fraction - f32(i32(edge_fraction));
 }
 
 generateRays :: proc(using cam: ^Camera2D) {
@@ -104,47 +125,42 @@ drawWalls :: proc(using cam: ^Camera2D) {
     using xform;
     using frame_buffer;
 
-    u, v,
     top, bottom, 
     pixel_offset,
     column_height: i32;
 
     texel_height,
-    distance: f32;
-    tiles_to_projection_plane := f32(tile_map.tile_size) * f32(width) * focal_length;
-    
-    x: i32;
-    for ray in &rays {
+    distance, u, v: f32;
+    tiles_to_projection_plane := f32(width) * focal_length * TILE_SIZE;
+
+    for ray, x in &rays {
         using ray;
 
-        // get the perpendicular distance to the wall to fix fishbowl distortion
-        distance = dot(hit.position - position, forward_direction^);
+        distance = dot((hit.position - position)*TILE_SIZE, forward_direction^);
         if distance < 0 do distance = -distance;
-        // projected wall height
-
+        
         column_height = i32(tiles_to_projection_plane / distance);
 
         top    = column_height < height ? (height - column_height) / 2 : 0;
         bottom = column_height < height ? (height + column_height) / 2 : height;
 
-        // Draw the floor and ceiling
-        drawVLine2D(0     , top   , x, CEILING_COLOR, &bitmap);
-        drawVLine2D(bottom, height, x, FLOOR_COLOR  , &bitmap);
 
-        texel_height = TEXTURE_HEIGHT / f32(column_height);
-        u = (hit.is_vertical ? i32(hit.position.y) : i32(hit.position.x)) % TEXTURE_WIDTH;
-        v = top + (column_height - height) / 2;
+        // Draw the floor and ceiling
+        drawVLine2D(0     , top   , i32(x), CEILING_COLOR, &bitmap);
+        // drawVLine2D(top   , bottom, i32(x), RED, &bitmap);
+        drawVLine2D(bottom, height, i32(x), FLOOR_COLOR  , &bitmap);
+
+        texel_height = 1 / f32(column_height);
+        v = column_height > height ? f32((column_height - height) / 2) * texel_height : 0;
         
-        // render the wall
-        pixel_offset = top * width + x;
+        // Draw the wall
+        pixel_offset = top * width + i32(x);
         for y in top..<bottom {
-            all_pixels[pixel_offset].color = textures[0][TEXTURE_WIDTH * i32(texel_height * f32(v)) + u];
+            all_pixels[pixel_offset] = sampleBitmap(&textures[hit.tile.texture_id], hit.tile_fraction, v);
 
             pixel_offset += width;
-            v += 1;
+            v += texel_height;
         }
-
-        x += 1;
     }
 }
     

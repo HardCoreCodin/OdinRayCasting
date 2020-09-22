@@ -18,7 +18,7 @@ GREEN: Color = {G = 0xFF};
 BLUE: Color = {B = 0xFF};
 YELLOW: Color = {R = 0xFF, G = 0xFF};
 
-RED_PIXEL: Pixel = {color = RED, A=255};
-BLUE_PIXEL: Pixel = {color = BLUE, A=255};
-GREEN_PIXEL: Pixel = {color = GREEN, A=255};
-YELLOW_PIXEL: Pixel = {color = YELLOW, A=255};
+RED_PIXEL: Pixel = {color = RED, opacity=255};
+BLUE_PIXEL: Pixel = {color = BLUE, opacity=255};
+GREEN_PIXEL: Pixel = {color = GREEN, opacity=255};
+YELLOW_PIXEL: Pixel = {color = YELLOW, opacity=255};

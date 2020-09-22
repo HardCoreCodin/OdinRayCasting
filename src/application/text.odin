@@ -1,0 +1,11 @@
+package application
+
+TEXT_COLOR__RESET :: "\033[0m";
+TEXT_COLOR__BLACK :: "\033[0;30m";
+TEXT_COLOR__RED   :: "\033[0;31m";
+TEXT_COLOR__GREEN :: "\033[0;32m";
+TEXT_COLOR__YELLO :: "\033[0;33m";
+TEXT_COLOR__BLUE  :: "\033[0;34m";
+TEXT_COLOR__MAG   :: "\033[0;35m";
+TEXT_COLOR__CYAN  :: "\033[0;36m";
+TEXT_COLOR__WHITE :: "\033[0;37m";

@@ -1,7 +1,34 @@
 package application
 
+INITIAL_WIDTH  :: 640;
+INITIAL_HEIGHT :: 480;
+
 import "core:fmt"
 print :: fmt.println;
+
+TEXTURE_COUNT :: 8;
+TEXTURE_WIDTH :: 64;
+TEXTURE_HEIGHT :: 64;
+TEXTURE_SIZE :: TEXTURE_WIDTH * TEXTURE_HEIGHT;
+
+texture_files: [TEXTURE_COUNT][]u8= {
+	#load("../../assets/bluestone.bmp"),
+	#load("../../assets/colorstone.bmp"),
+	#load("../../assets/eagle.bmp"),
+	#load("../../assets/graystone.bmp"),
+	#load("../../assets/mossystone.bmp"),
+	#load("../../assets/purplestone.bmp"),
+	#load("../../assets/redbrick.bmp"),
+	#load("../../assets/wood.bmp")
+};
+texture_bitmaps_data: [TEXTURE_COUNT][TEXTURE_SIZE]u32;
+textures: [TEXTURE_COUNT]Bitmap;
+
+loadTextures :: proc() {
+	for texture, i in &textures {
+		readBitmapFromFile(texture_files[i], &texture, texture_bitmaps_data[i][:]);
+	}
+}
 
 tile_map: TileMap;
 TILE_MAP_ASCII_GRID := `
@@ -38,7 +65,7 @@ TILE_MAP_ASCII_GRID := `
 `;
 
 SPEED :: 240;
-MOVEMENT_SPEED :: 0.4;
+MOVEMENT_SPEED :: 0.04;
 TURNING_SPEED :: 0.01;
 TARGET_FPS :: 60;
 UPDATE_INTERVAL: u64;
@@ -49,7 +76,6 @@ class_name :: "Application";
 camera: Camera2D;
 new_x, new_y: i32;
 new_position, moved_by: vec2;
-origin: vec2i;
 zoom: f64 = 1;
 turned_by: f32;
 turned, moved, tile_map_changed: bool;
@@ -69,7 +95,7 @@ resize :: proc(new_width, new_height: i32) {
 
 selected: i32;
 intersected: bool;
-update :: proc() {
+update2 :: proc() {
 	if !left_mouse_button.is_pressed {
 		selected = 0;
 		return;
@@ -102,7 +128,7 @@ update :: proc() {
 	}
 }
 
-update2 :: proc() {
+update :: proc() {
 	using frame_buffer;
 	using update_timer;
 	using camera.xform;
@@ -142,13 +168,10 @@ update2 :: proc() {
 		new_position = position + moved_by;
 		new_x = i32(new_position.x);
 		new_y = i32(new_position.y);	
-		if new_x >= 0 && 
-		   new_y >= 0 && 
-		   new_x < (tile_map.width * tile_map.tile_size) && 
-		   new_y < (tile_map.height * tile_map.tile_size) && 
-		   !tile_map.tiles[new_y / tile_map.tile_size][new_x / tile_map.tile_size].is_full {
+		if inRange(0, new_x, tile_map.width-1) && 
+		   inRange(0, new_y, tile_map.height-1) && 
+		   !tile_map.tiles[new_y][new_x].is_full {
 			position = new_position;
-			origin = {new_x, new_y};
 		}
 	}
 	
@@ -164,23 +187,23 @@ update2 :: proc() {
 
 	tile_map_changed = false;
 	if left_mouse_button.is_pressed && 
-		mouse_pos.x < (tile_map.width * tile_map.tile_size) && 
-		mouse_pos.y < (tile_map.height * tile_map.tile_size) {
+		mouse_pos.x < TILE_SIZE*tile_map.width && 
+		mouse_pos.y < TILE_SIZE*tile_map.height {
 
-		tile_map.tiles[mouse_pos.y / tile_map.tile_size][mouse_pos.x / tile_map.tile_size].is_full = true;
+		tile_map.tiles[mouse_pos.y/TILE_SIZE][mouse_pos.x/TILE_SIZE].is_full = true;
 		tile_map_changed = true;
 	}
 
 	if right_mouse_button.is_pressed &&
-		mouse_pos.x < (tile_map.width * tile_map.tile_size) && 
-		mouse_pos.y < (tile_map.height * tile_map.tile_size) {
+		mouse_pos.x < (TILE_SIZE*tile_map.width) && 
+		mouse_pos.y < (TILE_SIZE*tile_map.height) {
 		
-		tile_map.tiles[mouse_pos.y / tile_map.tile_size][mouse_pos.x / tile_map.tile_size].is_full = false;
+		tile_map.tiles[mouse_pos.y/TILE_SIZE][mouse_pos.x/TILE_SIZE].is_full = false;
 		tile_map_changed = true;
 	}
 
 	if tile_map_changed do generateTileMapEdges(&tile_map);
-	if tile_map_changed || moved do transformTileMapEdges(&tile_map, origin);
+	if tile_map_changed || moved do transformTileMapEdges(&tile_map, position);
 	if tile_map_changed || moved || turned do castRays();
 
 	ticks_before = getTicks();
@@ -194,7 +217,7 @@ D: vec2 = {410, 370};
 P: vec2;
 R: f32 = 5;
 
-render :: proc() {
+render2 :: proc() {
 	using camera.xform;
 	using frame_buffer;
 	fillRect(0, 0, width, height, BLACK, &bitmap);
@@ -208,7 +231,7 @@ render :: proc() {
 		fillCircle(P, R, RED, &bitmap);	
 }
 
-render2 :: proc() {
+render :: proc() {
 	using render_timer;
 	using camera.xform;
 	using frame_buffer;
@@ -221,19 +244,19 @@ render2 :: proc() {
 
 	for row, y in &tile_map.tiles do
 		for tile, x in &row do
-			if tile.is_full do fillRect(&tile.bounds, BLUE, &bitmap);
+			if tile.is_full do fillRect(tile.bounds.min*TILE_SIZE, tile.bounds.max*TILE_SIZE, BLUE, &bitmap);
 
 	padding: vec2i = {1, 1};
 
-	for ray in &rays do drawLine(position, ray.hit.position, GREY, &bitmap);
-	// for ray in &rays do drawLine(position, position + ray.direction*50, GREEN, &bitmap);
+	for ray in &rays do drawLine(TILE_SIZE*position, TILE_SIZE*ray.hit.position, GREY, &bitmap);
+	// for ray in &rays do drawLine(TILE_SIZE*position, TILE_SIZE*position + ray.direction*50, GREEN, &bitmap);
 	for edge in &tile_map.edges {
 		using edge;
-		drawLine(from^, to^, color, &bitmap);
-		fillRect(from^ - padding, from^ + padding, WHITE, &bitmap);
-		fillRect(to^   - padding, to^   + padding, WHITE, &bitmap);
+		drawLine(TILE_SIZE*from^, TILE_SIZE*to^, color, &bitmap);
+		fillRect(TILE_SIZE*from^ - padding, TILE_SIZE*from^ + padding, WHITE, &bitmap);
+		fillRect(TILE_SIZE*to^   - padding, TILE_SIZE*to^   + padding, WHITE, &bitmap);
 	}
-	fillCircle(position, 4, RED, &bitmap);
+	fillCircle(TILE_SIZE*position, 4, RED, &bitmap);
 
 	accumulateTimer(&render_timer);
 
@@ -259,17 +282,17 @@ render2 :: proc() {
 
 initApplication :: proc(platformGetTicks: GetTicks, platformTicksPerSecond: u64) {
 	using camera.xform;
-	position = 100;
-	origin = 100;
-	intersected = lineSegmentsIntersect(A, B, C, D, &P);
-	// loadTextures();
+	position = 10;
+	// intersected = lineSegmentsIntersect(A, B, C, D, &P);
 	initTimers(platformGetTicks, platformTicksPerSecond);
 	initFrameBuffer(&frame_buffer);
 	initFrameBuffer(&canvas);
 	initCamera(&camera);
 	initTileMap(&tile_map);
+
+	loadTextures();
 	readTileMapFromASCIIgrid(&tile_map, &TILE_MAP_ASCII_GRID);
 	generateTileMapEdges(&tile_map);
-	transformTileMapEdges(&tile_map, origin);
+	transformTileMapEdges(&tile_map, position);
 	UPDATE_INTERVAL = ticks_per_second / TARGET_FPS;
 }

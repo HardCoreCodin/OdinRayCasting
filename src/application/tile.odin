@@ -1,6 +1,6 @@
 package application
 
-DEFAULT_TILE_SIZE :: 10;
+TILE_SIZE :: 10;
 MAX_TILE_MAP_WIDTH :: 40;
 MAX_TILE_MAP_HEIGHT :: 30;
 MAX_TILE_MAP_SIZE :: MAX_TILE_MAP_WIDTH * MAX_TILE_MAP_HEIGHT;
@@ -25,9 +25,7 @@ Tile :: struct {
 }
 TileRow :: []Tile;
 
-TileEdge :: struct {
-	length: i32,
-	
+TileEdge :: struct {	
 	local: struct {
 		from, to: ^vec2,
 		is_above,
@@ -37,9 +35,10 @@ TileEdge :: struct {
 	},
 	from, to: ^vec2i,
 	color: Color,
+	length: i32,
 
 	is_visible,
-	is_horizontal,
+	is_vertical,
 
 	is_facing_left,
 	is_facing_right,
@@ -50,7 +49,6 @@ TileEdge :: struct {
 
 TileMap :: struct {
 	using size: Size2Di,
-	tile_size: i32,
 	tiles: []TileRow,
 	edges: []TileEdge,
 	edge_count,
@@ -77,11 +75,16 @@ initTile :: inline proc(using t: ^Tile) {
 	bottom_edge = nil;
 	left_edge = nil;
 	right_edge = nil;
+
+	texture_id = 0;
+
+	bounds.min.x = 0;
+	bounds.min.y = 0;
+	bounds.max.x = 0;
+	bounds.max.y = 0;
 }
 
 initTileEdge :: inline proc(using te: ^TileEdge) {
-	length = 0;
-	
 	local.from = nil;
 	local.to = nil;
 	local.is_above = false;
@@ -89,12 +92,14 @@ initTileEdge :: inline proc(using te: ^TileEdge) {
 	local.is_left = false;
 	local.is_right = false;
 
+	length = 0;
+
 	from = nil;
 	to = nil;
 	color = WHITE;
 
 	is_visible = false;
-	is_horizontal = false;
+	is_vertical = false;
 
 	is_facing_left = false;
 	is_facing_right = false;
@@ -103,10 +108,9 @@ initTileEdge :: inline proc(using te: ^TileEdge) {
 	is_facing_forward = false;
 }
 
-initTileMap :: proc(using tm: ^TileMap, Width: i32 = MAX_TILE_MAP_WIDTH, Height: i32 = MAX_TILE_MAP_HEIGHT, TileSize: i32 = DEFAULT_TILE_SIZE) {
+initTileMap :: proc(using tm: ^TileMap, Width: i32 = MAX_TILE_MAP_WIDTH, Height: i32 = MAX_TILE_MAP_HEIGHT) {
 	width = Width;
 	height = Height;
-	tile_size = TileSize;
 
 	edges = all_edges[:];
 	vertices = all_vertices[:];
@@ -134,8 +138,8 @@ readTileMapFromASCIIgrid :: proc(using tm: ^TileMap, ascii_grid: ^string) {
     offset: u32 = 1;
     current_bounds: Bounds2Di;
     using current_bounds;
-    bottom = tile_size;
-    left = tile_size;
+    bottom = 1;
+    left = 1;
 
     for row, y in &tiles {
         for tile, x in &row {
@@ -145,28 +149,26 @@ readTileMapFromASCIIgrid :: proc(using tm: ^TileMap, ascii_grid: ^string) {
         	using tile;
         	bounds = current_bounds;
         	is_full = character != EMPTY_TILE_CHARACTER;
-        	texture_id = is_full ? 0 : character - NUMBER_ASCII_OFFSET;
+        	texture_id = is_full ? character - NUMBER_ASCII_OFFSET : 0;
 
-            left += tile_size;
-			right += tile_size;
+            left += 1;
+			right += 1;
             offset += 1;
         }
 
         left = 0;
-		right = tile_size;
-		top += tile_size;
-		bottom += tile_size;
+		right = 1;
+		top += 1;
+		bottom += 1;
 
         offset += 1;
     }
 }
 
-
-
-transformTileMapEdges :: proc(using tm: ^TileMap, origin: vec2i) {
+transformTileMapEdges :: proc(using tm: ^TileMap, origin: vec2) {
 	for vertex, i in &vertices {
-		vertices_transformed[i].x = f32(vertex.x - origin.x);
-		vertices_transformed[i].y = f32(vertex.y - origin.y);	
+		vertices_transformed[i].x = f32(vertex.x) - origin.x;
+		vertices_transformed[i].y = f32(vertex.y) - origin.y;	
 	}
 	for edge in &edges {
 		using edge.local;
@@ -175,20 +177,12 @@ transformTileMapEdges :: proc(using tm: ^TileMap, origin: vec2i) {
 		is_left  = to.x < 0;
 		is_above = to.y < 0;
 
-		edge.is_facing_forward = edge.is_horizontal ? 
-			(edge.is_facing_down && is_above || edge.is_facing_up    && is_below):
-			(edge.is_facing_left && is_right || edge.is_facing_right && is_left );
+		edge.is_facing_forward = edge.is_vertical ? 
+			(edge.is_facing_left && is_right || edge.is_facing_right && is_left ):
+			(edge.is_facing_down && is_above || edge.is_facing_up    && is_below);
 		edge.color = edge.is_facing_forward ? YELLOW : RED;
 	}
 }
-
-
-
-
-
-
-
-
 
 generateTileMapEdges :: proc(using tm: ^TileMap) {
 	TileCheck :: struct {exists: bool, tile: ^Tile, row: []Tile};
@@ -203,7 +197,7 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		if above.exists do above.row = tiles[y - 1];
 		if below.exists do below.row = tiles[y + 1];
 
-        for tile, x in &row {
+        for current_tile, x in &row {
         	left.exists  = x > 0;
         	right.exists = i32(x) < width - 1;
 
@@ -212,26 +206,24 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
         	if above.exists do above.tile = &above.row[x]; 
         	if below.exists do below.tile = &below.row[x];
 
-        	using tile;
-        	if is_full {
-				has_left_edge   = left.exists  && !left.tile.is_full;
-	        	has_right_edge  = right.exists && !right.tile.is_full;
-	        	has_top_edge    = above.exists && !above.tile.is_full;
-	        	has_bottom_edge = below.exists && !below.tile.is_full;
+        	if current_tile.is_full {
+				current_tile.has_left_edge   = left.exists  && !left.tile.is_full;
+	        	current_tile.has_right_edge  = right.exists && !right.tile.is_full;
+	        	current_tile.has_top_edge    = above.exists && !above.tile.is_full;
+	        	current_tile.has_bottom_edge = below.exists && !below.tile.is_full;
 
-	        	if has_left_edge { // Create/extend left edge:
+	        	if current_tile.has_left_edge { // Create/extend left edge:
 		        	if above.exists && above.tile.has_left_edge { // Tile above has a left edge, extend it:
-		        		left_edge = above.tile.left_edge;
-		        		left_edge.length += tile_size;
-		        		left_edge.to.y += tile_size;
+		        		current_tile.left_edge = above.tile.left_edge;
+		        		current_tile.left_edge.length += 1;
+		        		current_tile.left_edge.to.y += 1;
 		        	} else { // No left edge above - create new one:
-		        		left_edge = &all_edges[edge_id];
-		        		initTileEdge(left_edge);
+		        		current_tile.left_edge = &all_edges[edge_id];
+		        		initTileEdge(current_tile.left_edge);
 						edge_id += 1;
 
-						using left_edge;
+						using current_tile.left_edge;
 		        		color = WHITE;
-		        		length = tile_size;
 
 		        		from = nil;
 		        		local.from = nil;
@@ -261,28 +253,28 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		        		vertex_id += 1;
 
 		        		to^ = position;
-		        		to.y += tile_size;
+		        		to.y += 1;
 
 	        			local.to.x = f32(to.x);
 	        			local.to.y = f32(to.y);
 		        		
+		        		is_vertical = true;
 		        		is_facing_left = true;
-		        	}
-		        }
+			        }
+			    }
 
-				if has_right_edge { // Create/extend right edge:
+				if current_tile.has_right_edge { // Create/extend right edge:
 		        	if above.exists && above.tile.has_right_edge { // Tile above has a right edge, extend it:
-		        		right_edge = above.tile.right_edge;
-		        		right_edge.length += tile_size;
-		        		right_edge.to.y += tile_size;
+		        		current_tile.right_edge = above.tile.right_edge;
+		        		current_tile.right_edge.length += 1;
+		        		current_tile.right_edge.to.y += 1;
 		        	} else { // No right edge above - create new one:
-		        		right_edge = &all_edges[edge_id];
-		        		initTileEdge(right_edge);
+		        		current_tile.right_edge = &all_edges[edge_id];
+		        		initTileEdge(current_tile.right_edge);
 						edge_id += 1;
 
-						using right_edge;
+						using current_tile.right_edge;
 		        		color = WHITE;
-		        		length = tile_size;
 
 						from = nil;
 		        		local.from = nil;
@@ -302,7 +294,7 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		        			vertex_id += 1;
 
 		        			from^ = position;
-		        			from.x += tile_size;
+		        			from.x += 1;
 
 		        			local.from.x = f32(from.x);
 		        			local.from.y = f32(from.y);
@@ -313,29 +305,29 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		        		vertex_id += 1;
 
 		        		to^ = position;
-		        		to.x += tile_size;
-		        		to.y += tile_size;
+		        		to.x += 1;
+		        		to.y += 1;
 
 	        			local.to.x = f32(to.x);
 	        			local.to.y = f32(to.y);
 		        		
+		        		is_vertical = true;
 		        		is_facing_right = true;
-		        	}
-		        }
+			        }
+				}
 
-		        if has_top_edge { // Create/extend top edge:
+		        if current_tile.has_top_edge { // Create/extend top edge:
 		        	if left.exists && left.tile.has_top_edge { // Tile on the left has a top edge, extend it:
-		        		top_edge = left.tile.top_edge;
-		        		top_edge.length += tile_size;
-		        		top_edge.to.x += tile_size;
+		        		current_tile.top_edge = left.tile.top_edge;
+		        		current_tile.top_edge.length += 1;
+		        		current_tile.top_edge.to.x += 1;
 		        	} else { // No top edge on the left - create new one:
-		        		top_edge = &all_edges[edge_id];
-		        		initTileEdge(top_edge);
+		        		current_tile.top_edge = &all_edges[edge_id];
+		        		initTileEdge(current_tile.top_edge);
 						edge_id += 1;
 
-						using top_edge;
+						using current_tile.top_edge;
 		        		color = WHITE;
-		        		length = tile_size;
 
 						from = nil;
 		        		local.from = nil;
@@ -378,37 +370,36 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		        			vertex_id += 1;
 
 		        			to^ = position;
-		        			to.x += tile_size;
+		        			to.x += 1;
 
 		        			local.to.x = f32(to.x);
 		        			local.to.y = f32(to.y);
 		        		}
 		        		
+		        		is_vertical = false;
 		        		is_facing_up = true;
-		        		is_horizontal = true;
-		        	}
+			        }
 		        }
 
-		        if has_bottom_edge { // Create/extend bottom edge:
+		        if current_tile.has_bottom_edge { // Create/extend bottom edge:
 		        	if left.exists && left.tile.has_bottom_edge {// Tile on the left has a bottom edge, extend it:
-		        		bottom_edge = left.tile.bottom_edge;
-		        		bottom_edge.length += tile_size;
-		        		bottom_edge.to.x += tile_size;
+		        		current_tile.bottom_edge = left.tile.bottom_edge;
+		        		current_tile.bottom_edge.length += 1;
+		        		current_tile.bottom_edge.to.x += 1;
 		        	} else { // No bottom edge on the left - create new one:
-		        		bottom_edge = &all_edges[edge_id];
-		        		initTileEdge(bottom_edge);
+		        		current_tile.bottom_edge = &all_edges[edge_id];
+		        		initTileEdge(current_tile.bottom_edge);
 						edge_id += 1;
 
-						using bottom_edge;
+						using current_tile.bottom_edge;
 		        		color = WHITE;
-		        		length = tile_size;
 
 	        			from = &all_vertices[vertex_id];
 	        			local.from = &all_vertices_transformed[vertex_id];
 	        			vertex_id += 1;
 
 	        			from^ = position;
-	        			from.y += tile_size;
+	        			from.y += 1;
 
 	        			local.from.x = f32(from.x);
 	        			local.from.y = f32(from.y);
@@ -418,35 +409,34 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 	        			vertex_id += 1;
 
 	        			to^ = position;
-	        			to.x += tile_size;
-	        			to.y += tile_size;
+	        			to.x += 1;
+	        			to.y += 1;
 
 	        			local.to.x = f32(to.x);
 	        			local.to.y = f32(to.y);
 
+		        		is_vertical = false;
 		        		is_facing_down = true;
-		        		is_horizontal = true;
-		        	}
-		        }
+			        }
+	        	}
         	} else {
-        		has_left_edge   = false;
-	        	has_right_edge  = false;
-	        	has_top_edge    = false;
-	        	has_bottom_edge = false;
+        		current_tile.has_left_edge   = false;
+	        	current_tile.has_right_edge  = false;
+	        	current_tile.has_top_edge    = false;
+	        	current_tile.has_bottom_edge = false;
         	}
-        	
 
-	        bounds.left = position.x;
-	        bounds.right = position.x + tile_size;
+	        current_tile.bounds.left = position.x;
+	        current_tile.bounds.right = position.x + 1;
 
-	        bounds.top = position.y;
-	        bounds.bottom = position.y + tile_size;
+	        current_tile.bounds.top = position.y;
+	        current_tile.bounds.bottom = position.y + 1;
 
-			position.x += tile_size;
+			position.x += 1;
         }
 
         position.x  = 0;
-        position.y += tile_size;
+        position.y += 1;
     }
 
 	edges = all_edges[:edge_id];
