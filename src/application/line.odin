@@ -1,35 +1,38 @@
 package application
 
-_drawHLine2Di :: inline proc(from, to, at: i32, color: Color, using bitmap: ^Bitmap) {
+_drawHLine2Di :: inline proc(using bitmap: ^Bitmap, from, to, at: i32, color: Color, opacity: u8 = 255) {
 	if !_inRangeI(0, at, height - 1) do return;
 	offset := at * width;
 	first, last := _subRangeI(from, to, width);
 	first += offset;
 	last += offset;
-	for i in first..last do all_pixels[i].color = color;
+    pixel: Pixel = {color = color, opacity = opacity};
+	for i in first..last do all_pixels[i] = pixel;
 };
-_drawHLine2Df :: inline proc(from, to, at: f32, color: Color, using bitmap: ^Bitmap) do _drawHLine2Di(i32(from), i32(to), i32(at), color, bitmap);
-drawHLine2D :: proc{_drawHLine2Di, _drawHLine2Df};
-
-_drawVLine2Di :: inline proc(from, to, at: i32, color: Color, using bitmap: ^Bitmap) {
+_drawVLine2Di :: inline proc(using bitmap: ^Bitmap, from, to, at: i32, color: Color, opacity: u8 = 255) {
 	if !inRange(0, at, width - 1) do return;
 	first, last := _subRangeI(from, to, height);
 	first *= width; first += at;
 	last  *= width; last  += at;
-	for i := first; i <= last; i += width do all_pixels[i].color = color;
+    pixel: Pixel = {color = color, opacity = opacity};
+	for i := first; i <= last; i += width do all_pixels[i] = pixel;
 }
-_drawVLine2Df :: inline proc(from, to, at: f32, color: Color, using bitmap: ^Bitmap) do _drawVLine2Di(i32(from), i32(to), i32(at), color, bitmap);
+_drawHLine2Df :: inline proc(using bitmap: ^Bitmap, from, to, at: f32, color: Color, opacity: u8 = 255) do _drawHLine2Di(bitmap, i32(from), i32(to), i32(at), color, opacity);
+_drawVLine2Df :: inline proc(using bitmap: ^Bitmap, from, to, at: f32, color: Color, opacity: u8 = 255) do _drawVLine2Di(bitmap, i32(from), i32(to), i32(at), color, opacity);
 drawVLine2D :: proc{_drawVLine2Di, _drawVLine2Df};
+drawHLine2D :: proc{_drawHLine2Di, _drawHLine2Df};
 
-_drawLine2Di :: inline proc(x0, y0, x1, y1: i32, color: Color, using bitmap: ^Bitmap) {
+_drawLine2Di :: inline proc(using bitmap: ^Bitmap, x0, y0, x1, y1: i32, color: Color, opacity: u8 = 255) {
 	if x0 == x1 {
-		_drawVLine2Di(y0, y1, x1, color, bitmap);
+		_drawVLine2Di(bitmap, y0, y1, x1, color, opacity);
 		return;
 	} 
 	if y0 == y1 {
-		_drawHLine2Di(x0, x1, y1, color, bitmap);
+		_drawHLine2Di(bitmap, x0, x1, y1, color, opacity);
 		return;
 	}
+
+    pixel: Pixel = {color = color, opacity = opacity};
 	
     pitch := width;
 	index := x0 + y0 * width;
@@ -72,11 +75,11 @@ _drawLine2Di :: inline proc(x0, y0, x1, y1: i32, color: Color, using bitmap: ^Bi
     for current1 != end {
         current1 += inc1;
         if is_steap {
-        	if _inRangeI(0, current1, height) && _inRangeI(0, current2, width) do
-        		all_pixels[index].color = color;
+        	if index > 0 && _inRangeI(0, current1, height-1) && _inRangeI(0, current2, width-1) do
+        		all_pixels[index] = pixel;
         } else
-        	if _inRangeI(0, current2, height) && _inRangeI(0, current1, width) do
-        		all_pixels[index].color = color;
+        	if index > 0 &&_inRangeI(0, current2, height-1) && _inRangeI(0, current1, width-1) do
+        		all_pixels[index] = pixel;
         
         index += index_inc1;
         error += error_inc;
@@ -87,10 +90,9 @@ _drawLine2Di :: inline proc(x0, y0, x1, y1: i32, color: Color, using bitmap: ^Bi
         }
     }
 }
-_drawLine2Df :: inline proc(x0, y0, x1, y1: f32, color: Color, using bitmap: ^Bitmap) do _drawLine2Di(i32(x0), i32(y0), i32(x1), i32(y1), color, bitmap);
-_drawLineVec2i :: inline proc(from, to: vec2i, color: Color, using bitmap: ^Bitmap) do _drawLine2Di(from.x, from.y, to.x, to.y, color, bitmap);
-_drawLineVec2f :: inline proc(from, to: vec2,  color: Color, using bitmap: ^Bitmap) do _drawLine2Df(from.x, from.y, to.x, to.y, color, bitmap);
-
+_drawLine2Df :: inline proc(using bitmap: ^Bitmap, x0, y0, x1, y1: f32, color: Color, opacity: u8 = 255) do _drawLine2Di(bitmap, i32(x0), i32(y0), i32(x1), i32(y1), color, opacity);
+_drawLineVec2i :: inline proc(using bitmap: ^Bitmap, from, to: vec2i, color: Color, opacity: u8 = 255) do _drawLine2Di(bitmap, from.x, from.y, to.x, to.y, color, opacity);
+_drawLineVec2f :: inline proc(using bitmap: ^Bitmap, from, to: vec2,  color: Color, opacity: u8 = 255) do _drawLine2Df(bitmap, from.x, from.y, to.x, to.y, color, opacity);
 drawLine :: proc{_drawLine2Di, _drawLine2Df, _drawLineVec2i, _drawLineVec2f};
 
 lineSegmentsIntersect :: proc(A, B, C, D: vec2, P: ^vec2) -> bool {

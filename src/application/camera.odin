@@ -1,69 +1,102 @@
 package application
 
-Camera2D :: struct {focal_length: f32, xform: xform2};
-Camera3D :: struct {focal_length: f32, xform: xform3};
-
-initCamera2D :: proc(out: ^Camera2D, focal_length: f32 = 1) {
-    out.focal_length = focal_length;
-    initXform(&out.xform);
+Facing :: struct {
+    is_vertical,
+    is_horizontal,
+    is_facing_up,
+    is_facing_down,
+    is_facing_left,
+    is_facing_right: bool
 }
-initCamera3D :: proc(out: ^Camera3D, focal_length: f32 = 1) {
-    out.focal_length = focal_length;
-    initXform(&out.xform);
+setFacing :: proc(using facing: ^Facing, direction: vec2) {
+    is_vertical     = direction.x == 0;
+    is_horizontal   = direction.y == 0;
+    is_facing_left  = direction.x < 0;
+    is_facing_up    = direction.y < 0;
+    is_facing_right = direction.x > 0;
+    is_facing_down  = direction.y > 0;
+}
+
+Camera   :: struct {using facing: Facing, focal_length: f32};
+Camera2D :: struct {using base: Camera, xform: xform2};
+Camera3D :: struct {using base: Camera, xform: xform3};
+
+initCamera2D :: proc(using cam: ^Camera2D, initial_focal_length: f32 = 1) {
+    focal_length = initial_focal_length;
+    initXform(&xform);
+    setFacing(&facing, xform.forward_direction^);
+}
+initCamera3D :: proc(using cam: ^Camera3D, initial_focal_length: f32 = 1) {
+    focal_length = initial_focal_length;
+    initXform(&xform);
+    // setFacing(&facing, xform.forward_direction^);
 }
 initCamera :: proc{initCamera2D, initCamera3D};
 
 CameraController :: struct {
     moved, 
-    rotated, 
+    turned, 
     zoomed: bool,
 
     max_velocity, 
     max_acceleration, 
-    orientation_speed,
-    zoom_speed,
+    turn_speed,
     zoom_amount: f32
 };
+
+initCameraController :: proc(ctrl: ^CameraController,
+    zoom_amount: f32 = 1,
+    max_velocity: f32 = 5,
+    max_acceleration: f32 = 20,
+
+    turn_speed: f32 = 0.002) {
+
+    ctrl.max_velocity = max_velocity;
+    ctrl.max_acceleration = max_acceleration;
+    ctrl.turn_speed = turn_speed;
+    ctrl.zoom_amount = zoom_amount;
+};
+
 CameraController2D :: struct { using controller: CameraController,
     camera: ^Camera2D,
-    
+
+    movement,    
+    old_position,
     target_velocity, 
     current_velocity: vec2
 };
 CameraController3D :: struct { using controller: CameraController,
     camera: ^Camera3D,
 
+    movement,
+    old_position,
     target_velocity, 
     current_velocity: vec3
 };
 
-initController :: proc(ctrl: ^$CameraControllerType/$CameraController,
-    zoom_amount: f32 = 1,
-    zoom_speed: f32 = 0.005,
-
-    max_velocity: f32 = 8,
-    max_acceleration: f32 = 20,
-
-    orientation_speed: f32 = 2.0 / 1000) {
-
-    ctrl.max_velocity = max_velocity;
-    ctrl.max_acceleration = max_acceleration;
-    ctrl.orientation_speed = orientation_speed;
-    ctrl.zoom_speed = zoom_speed;
-    ctrl.zoom_amount = zoom_amount;
-};
-
-onMouseScrolled :: proc(using ctrl: ^$CameraControllerType/$CameraController) {
-    camera.focal_length += zoom_speed * f32(mouse_wheel_scroll_amount);
-    zoom_amount = camera.focal_length;
+onMouseScrolled :: proc(using ctrl: ^CameraController2D) {
     zoomed = true;
+
+    zoom_amount += mouse_wheel_scroll_amount;
+         if zoom_amount > +1 do camera.focal_length = zoom_amount;
+    else if zoom_amount < -1 do camera.focal_length = -1 / zoom_amount;
+    else                     do camera.focal_length = 1;
+
+    mouse_wheel_scroll_amount = 0;
+    mouse_wheel_scrolled = false;
 }
-onMouseMoved :: proc(using ctrl: ^$CameraControllerType/$CameraController) {
-    rotate(&xform,
-        -f32(mouse_pos_diff.x) * orientation_speed,
-        -f32(mouse_pos_diff.y) * orientation_speed
+
+onMouseMoved :: proc(using ctrl: ^CameraController2D) {
+    turned = true;
+    
+    rotate(&camera.xform,
+         f32(mouse_pos_diff.x) * turn_speed,
+        -f32(mouse_pos_diff.y) * turn_speed
     );
-    rotated = true;
+    
+    mouse_pos_diff.x = 0;
+    mouse_pos_diff.y = 0;
+    mouse_moved = false;
 }
 
 onUpdate3D :: proc(using ctrl: ^CameraController3D) {
@@ -83,7 +116,7 @@ onUpdate3D :: proc(using ctrl: ^CameraController3D) {
         max_acceleration * delta_time
     );
     if non_zero(current_velocity) { // Update the current position:
-        movement := current_velocity * delta_time;
+        movement = current_velocity * delta_time;
 
         using camera.xform;
         position.y += movement.y;
@@ -100,17 +133,22 @@ onUpdate2D :: proc(using ctrl: ^CameraController2D) {
     if move_backward  do target_velocity.y -= max_velocity;
 
     // Update the current velocity:
-    delta_time := f32(clamp(update_timer.seconds, 0, 1));
+    using update_timer;
     approach(
         &current_velocity, 
         &target_velocity, 
         max_acceleration * delta_time
     );
-    if non_zero(current_velocity) { // Update the current position:
-        movement := current_velocity * delta_time;
 
+    moved = non_zero(current_velocity);
+    if moved { // Update the current position:
         using camera.xform;
-        position.x += movement.x*rotation_matrix.X.x + movement.y*rotation_matrix.Y.x;
-        position.y += movement.x*rotation_matrix.X.y + movement.y*rotation_matrix.Y.y;
+        movement = multiplyVectorByMatrix(current_velocity * delta_time, &rotation_matrix);
+        old_position = position;
+        position += movement;
+    }
+    if turn_right || turn_left {
+        turned = true;
+        rotate(&camera.xform, turn_left ? -delta_time*2 : delta_time*2, 0);
     }
 }

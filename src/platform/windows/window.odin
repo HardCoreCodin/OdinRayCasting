@@ -139,6 +139,9 @@ run_application :: proc() {
 	backward_key = 'S';
 	left_key     = 'A';  turn_left_key  = 'Q';
 	right_key    = 'D';  turn_right_key = 'E';
+	toggle1_key  = '1';
+	toggle2_key  = '2';
+	ctrl_key     = VK_CONTROL;
 	exit_key     = VK_ESCAPE;
 
 	HInstance: HINSTANCE = transmute(HINSTANCE)GetModuleHandleA(nil);

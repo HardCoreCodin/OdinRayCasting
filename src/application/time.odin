@@ -11,6 +11,8 @@ milliseconds_per_tick,
 microseconds_per_tick: f64;
 
 Timer :: struct {
+	delta_time: f32,
+
 	ticks_before, 
 	ticks_after, 
 	ticks_diff,

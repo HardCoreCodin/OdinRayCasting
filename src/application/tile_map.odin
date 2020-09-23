@@ -1,6 +1,6 @@
 package application
 
-TILE_SIZE :: 10;
+MAX_TILE_MAP_VIEW_DISTANCE :: 50;
 MAX_TILE_MAP_WIDTH :: 40;
 MAX_TILE_MAP_HEIGHT :: 30;
 MAX_TILE_MAP_SIZE :: MAX_TILE_MAP_WIDTH * MAX_TILE_MAP_HEIGHT;
@@ -9,6 +9,7 @@ MAX_TILE_MAP_EDGES :: MAX_TILE_MAP_WIDTH * (MAX_TILE_MAP_HEIGHT + 1) + MAX_TILE_
 
 Tile :: struct {
 	bounds: Bounds2Di,
+	bounds_in_minimap_space: Bounds2Df,
 	texture_id: u8,
 
 	is_full,
@@ -25,7 +26,7 @@ Tile :: struct {
 }
 TileRow :: []Tile;
 
-TileEdge :: struct {	
+TileEdge :: struct {using facing: Facing, 
 	local: struct {
 		from, to: ^vec2,
 		is_above,
@@ -33,17 +34,13 @@ TileEdge :: struct {
 		is_left,
 		is_right: bool	
 	},
+	minimap: struct {
+		from, to: ^vec2	
+	},
 	from, to: ^vec2i,
-	color: Color,
 	length: i32,
 
 	is_visible,
-	is_vertical,
-
-	is_facing_left,
-	is_facing_right,
-	is_facing_up,
-	is_facing_down,
 	is_facing_forward: bool
 }
 
@@ -54,13 +51,15 @@ TileMap :: struct {
 	edge_count,
 	vertex_count: i32,
 	vertices: []vec2i,
-	vertices_transformed: []vec2,
+	vertices_in_local_space: []vec2,
+	vertices_in_minimap_space: []vec2,
 
 	all_rows: [MAX_TILE_MAP_HEIGHT]TileRow,
 	all_tiles: [MAX_TILE_MAP_SIZE]Tile,
 	all_edges: [MAX_TILE_MAP_EDGES]TileEdge,
 	all_vertices: [MAX_TILE_MAP_VERTICES]vec2i,
-	all_vertices_transformed: [MAX_TILE_MAP_VERTICES]vec2
+	all_vertices_in_local_space: [MAX_TILE_MAP_VERTICES]vec2,
+	all_vertices_in_minimap_space: [MAX_TILE_MAP_VERTICES]vec2
 }
 
 initTile :: inline proc(using t: ^Tile) {
@@ -94,9 +93,11 @@ initTileEdge :: inline proc(using te: ^TileEdge) {
 
 	length = 0;
 
+	minimap.from = nil;
+	minimap.to = nil;
+
 	from = nil;
 	to = nil;
-	color = WHITE;
 
 	is_visible = false;
 	is_vertical = false;
@@ -114,7 +115,8 @@ initTileMap :: proc(using tm: ^TileMap, Width: i32 = MAX_TILE_MAP_WIDTH, Height:
 
 	edges = all_edges[:];
 	vertices = all_vertices[:];
-	vertices_transformed = all_vertices_transformed[:];
+	vertices_in_local_space = all_vertices_in_local_space[:];
+	vertices_in_minimap_space = all_vertices_in_minimap_space[:];
 
 	for tile in &all_tiles do initTile(&tile);
 	
@@ -165,11 +167,12 @@ readTileMapFromASCIIgrid :: proc(using tm: ^TileMap, ascii_grid: ^string) {
     }
 }
 
-transformTileMapEdges :: proc(using tm: ^TileMap, origin: vec2) {
+moveTileMap :: proc(using tm: ^TileMap, origin: vec2) {
 	for vertex, i in &vertices {
-		vertices_transformed[i].x = f32(vertex.x) - origin.x;
-		vertices_transformed[i].y = f32(vertex.y) - origin.y;	
+		vertices_in_local_space[i].x = f32(vertex.x) - origin.x;
+		vertices_in_local_space[i].y = f32(vertex.y) - origin.y;
 	}
+
 	for edge in &edges {
 		using edge.local;
 		is_right = from.x > 0;
@@ -180,7 +183,6 @@ transformTileMapEdges :: proc(using tm: ^TileMap, origin: vec2) {
 		edge.is_facing_forward = edge.is_vertical ? 
 			(edge.is_facing_left && is_right || edge.is_facing_right && is_left ):
 			(edge.is_facing_down && is_above || edge.is_facing_up    && is_below);
-		edge.color = edge.is_facing_forward ? YELLOW : RED;
 	}
 }
 
@@ -223,10 +225,10 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 						edge_id += 1;
 
 						using current_tile.left_edge;
-		        		color = WHITE;
 
 		        		from = nil;
 		        		local.from = nil;
+		        		minimap.from = nil;
 		        		if left.exists && above.exists {
 		        			top_left := &above.row[x-1];
 		        			if top_left.is_full && 
@@ -234,29 +236,26 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		        			   top_left.has_bottom_edge {
 		        				from = top_left.bottom_edge.to;
 		        				local.from = top_left.bottom_edge.local.to;
+		        				minimap.from = top_left.bottom_edge.minimap.to;
 		        			}
 		        		}
 
 		        		if from == nil {
 		        			from = &all_vertices[vertex_id];
-		        			local.from = &all_vertices_transformed[vertex_id];
+		        			local.from = &all_vertices_in_local_space[vertex_id];
+		        			minimap.from = &all_vertices_in_minimap_space[vertex_id];
 		        			vertex_id += 1;
 
 		        			from^ = position;
-
-		        			local.from.x = f32(from.x);
-		        			local.from.y = f32(from.y);
 		        		}
 
 		        		to = &all_vertices[vertex_id];
-		        		local.to = &all_vertices_transformed[vertex_id];
+		        		local.to = &all_vertices_in_local_space[vertex_id];
+		        		minimap.to = &all_vertices_in_minimap_space[vertex_id];
 		        		vertex_id += 1;
 
 		        		to^ = position;
 		        		to.y += 1;
-
-	        			local.to.x = f32(to.x);
-	        			local.to.y = f32(to.y);
 		        		
 		        		is_vertical = true;
 		        		is_facing_left = true;
@@ -274,10 +273,10 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 						edge_id += 1;
 
 						using current_tile.right_edge;
-		        		color = WHITE;
 
 						from = nil;
 		        		local.from = nil;
+		        		minimap.from = nil;
 		        		if right.exists && above.exists {
 		        			top_right := &above.row[x+1];
 		        			if top_right.is_full &&
@@ -285,32 +284,29 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		        			   top_right.has_bottom_edge {
 		        				from = top_right.bottom_edge.from;
 		        				local.from = top_right.bottom_edge.local.from;
+		        				minimap.from = top_right.bottom_edge.minimap.from;
 		        			}
 		        		}
 
 		        		if from == nil {
 		        			from = &all_vertices[vertex_id];
-		        			local.from = &all_vertices_transformed[vertex_id];
+		        			local.from = &all_vertices_in_local_space[vertex_id];
+		        			minimap.from = &all_vertices_in_minimap_space[vertex_id];
 		        			vertex_id += 1;
 
 		        			from^ = position;
 		        			from.x += 1;
-
-		        			local.from.x = f32(from.x);
-		        			local.from.y = f32(from.y);
 		        		}
 
 						to = &all_vertices[vertex_id];
-		        		local.to = &all_vertices_transformed[vertex_id];
+		        		local.to = &all_vertices_in_local_space[vertex_id];
+		        		minimap.to = &all_vertices_in_minimap_space[vertex_id];
 		        		vertex_id += 1;
 
 		        		to^ = position;
 		        		to.x += 1;
 		        		to.y += 1;
 
-	        			local.to.x = f32(to.x);
-	        			local.to.y = f32(to.y);
-		        		
 		        		is_vertical = true;
 		        		is_facing_right = true;
 			        }
@@ -327,10 +323,10 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 						edge_id += 1;
 
 						using current_tile.top_edge;
-		        		color = WHITE;
 
 						from = nil;
 		        		local.from = nil;
+		        		minimap.from = nil;
 		        		if left.exists && above.exists {
 		        			top_left := &above.row[x-1];
 		        			if top_left.is_full && 
@@ -338,11 +334,13 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		        			   top_left.has_bottom_edge {
 		        				from = top_left.bottom_edge.to;
 		        				local.from = top_left.bottom_edge.local.to;
+		        				minimap.from = top_left.bottom_edge.minimap.to;
 		        			}
 		        		}
 
 						to = nil;
 		        		local.to = nil;
+		        		minimap.to = nil;
 		        		if right.exists && above.exists {
 		        			top_right := &above.row[x+1];
 		        			if top_right.is_full &&
@@ -350,30 +348,27 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		        			   top_right.has_bottom_edge {
 		        				to = top_right.bottom_edge.from;
 		        				local.to = top_right.bottom_edge.local.from;
+		        				minimap.to = top_right.bottom_edge.minimap.from;
 		        			}
 		        		}
 
 		        		if from == nil {
 		        			from = &all_vertices[vertex_id];
-		        			local.from = &all_vertices_transformed[vertex_id];
+		        			local.from = &all_vertices_in_local_space[vertex_id];
+		        			minimap.from = &all_vertices_in_minimap_space[vertex_id];
 		        			vertex_id += 1;
 
 		        			from^ = position;
-
-		        			local.from.x = f32(from.x);
-		        			local.from.y = f32(from.y);
 		        		}
 
 						if to == nil {
 		        			to = &all_vertices[vertex_id];
-		        			local.to = &all_vertices_transformed[vertex_id];
+		        			local.to = &all_vertices_in_local_space[vertex_id];
+		        			minimap.to = &all_vertices_in_minimap_space[vertex_id];
 		        			vertex_id += 1;
 
 		        			to^ = position;
 		        			to.x += 1;
-
-		        			local.to.x = f32(to.x);
-		        			local.to.y = f32(to.y);
 		        		}
 		        		
 		        		is_vertical = false;
@@ -392,28 +387,23 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 						edge_id += 1;
 
 						using current_tile.bottom_edge;
-		        		color = WHITE;
 
 	        			from = &all_vertices[vertex_id];
-	        			local.from = &all_vertices_transformed[vertex_id];
+	        			local.from = &all_vertices_in_local_space[vertex_id];
+	        			minimap.from = &all_vertices_in_minimap_space[vertex_id];
 	        			vertex_id += 1;
 
 	        			from^ = position;
 	        			from.y += 1;
 
-	        			local.from.x = f32(from.x);
-	        			local.from.y = f32(from.y);
-
 	        			to = &all_vertices[vertex_id];
-	        			local.to = &all_vertices_transformed[vertex_id];
+	        			local.to = &all_vertices_in_local_space[vertex_id];
+	        			minimap.to = &all_vertices_in_minimap_space[vertex_id];
 	        			vertex_id += 1;
 
 	        			to^ = position;
 	        			to.x += 1;
 	        			to.y += 1;
-
-	        			local.to.x = f32(to.x);
-	        			local.to.y = f32(to.y);
 
 		        		is_vertical = false;
 		        		is_facing_down = true;
@@ -441,5 +431,6 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 	edges = all_edges[:edge_id];
 	vertices = all_vertices[:vertex_id];
-	vertices_transformed = all_vertices_transformed[:vertex_id];
+	vertices_in_local_space = all_vertices_in_local_space[:vertex_id];
+	vertices_in_minimap_space = all_vertices_in_minimap_space[:vertex_id];
 }

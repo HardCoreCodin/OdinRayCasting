@@ -24,13 +24,9 @@ texture_files: [TEXTURE_COUNT][]u8= {
 texture_bitmaps_data: [TEXTURE_COUNT][TEXTURE_SIZE]u32;
 textures: [TEXTURE_COUNT]Bitmap;
 
-loadTextures :: proc() {
-	for texture, i in &textures {
-		readBitmapFromFile(texture_files[i], &texture, texture_bitmaps_data[i][:]);
-	}
-}
-
+mini_map: MiniMap;
 tile_map: TileMap;
+
 TILE_MAP_ASCII_GRID := `
 1111111111111111111111111111111111111111
 1______________________________________1
@@ -74,225 +70,166 @@ is_running: bool = true;
 class_name :: "Application";
 
 camera: Camera2D;
-new_x, new_y: i32;
-new_position, moved_by: vec2;
-zoom: f64 = 1;
-turned_by: f32;
-turned, moved, tile_map_changed: bool;
+camera_controller: CameraController2D;
 
-stored_bounds: [dynamic]Bounds2Di;
-canvas, frame_buffer: FrameBuffer;
+body_radius: f32 = 0.3;
+next_tile: ^Tile;
+tile_map_changed: bool;
 
-// new_approach: bool;
+frame_buffer: FrameBuffer;
 
 resize :: proc(new_width, new_height: i32) {
 	resizeFrameBuffer(new_width, new_height, &frame_buffer);
 	setRayCount(new_width);
 	generateRays(&camera);
-	castRays();
-	update();	
+	castRays(&tile_map);
+	update();
+	render();
 }
 
-selected: i32;
-intersected: bool;
-update2 :: proc() {
-	if !left_mouse_button.is_pressed {
-		selected = 0;
-		return;
-	}
-
-	pos: vec2 = {
-		f32(mouse_pos.x), 
-		f32(mouse_pos.y)
-	};
-
-	switch selected {
-		case 0:
-			if inRange(A.x - R, pos.x, A.x + R) &&
-			   inRange(A.y - R, pos.y, A.y + R) do selected = 1; else 
-			if inRange(B.x - R, pos.x, B.x + R) &&
-			   inRange(B.y - R, pos.y, B.y + R) do selected = 2; else
-			if inRange(C.x - R, pos.x, C.x + R) &&
-			   inRange(C.y - R, pos.y, C.y + R) do selected = 3; else
-			if inRange(D.x - R, pos.x, D.x + R) &&
-			   inRange(D.y - R, pos.y, D.y + R) do selected = 4;
-		case 1: A = pos;
-		case 2: B = pos;
-		case 3: C = pos;
-		case 4: D = pos;
-	}
-
-	if mouse_moved && selected != 0 {
-		mouse_moved = false;
-		intersected = lineSegmentsIntersect(A, B, C, D, &P);
-	}
-}
+mouseOnMiniMap :: inline proc() -> bool do return mini_map.is_visible && inBounds(mini_map.bounds, mouse_pos);
 
 update :: proc() {
 	using frame_buffer;
 	using update_timer;
 	using camera.xform;
+	using camera_controller;
+
+	mini_map.panned = false;
+	mini_map.zoomed = false;
+	mini_map.resized = false;
+	mini_map.toggled = mini_map.is_visible != toggle1 || mini_map.is_debug_visible != toggle2;
+	mini_map.is_visible = toggle1;
+	mini_map.is_debug_visible = toggle2;
 
 	ticks_after = getTicks();
 	ticks_diff = ticks_after - ticks_before;
+	delta_time = f32(f64(ticks_diff) * seconds_per_tick);
 
-	amount := f32(SPEED * (f64(ticks_diff) * seconds_per_tick));
-
-	// if move_up do new_approach = !new_approach;
-
-	moved_by = 0;
-	if move_right    do moved_by.x += amount * MOVEMENT_SPEED;
-	if move_left     do moved_by.x -= amount * MOVEMENT_SPEED;
-	if move_forward  do moved_by.y -= amount * MOVEMENT_SPEED;
-	if move_backward do moved_by.y += amount * MOVEMENT_SPEED;
-	moved = moved_by.x != 0 || moved_by.y != 0;
-
-	turned_by = 0;
-	if turn_right    do turned_by += amount * TURNING_SPEED;
-	if turn_left     do turned_by -= amount * TURNING_SPEED;
-	turned = turned_by != 0;
-
-	if turned {
-		rotate(&camera.xform, turned_by, 0);
-		generateRays(&camera);
-	}
-
-	// if mouse_is_captured || middle_mouse_button.is_pressed {	
-	// 	if mouse_pos_diff.x != 0 do moved_by.x += amount * f64(mouse_pos_diff.x) * MOVEMENT_SPEED;
-	// 	if mouse_pos_diff.y != 0 do moved_by.y += amount * f64(mouse_pos_diff.y) * MOVEMENT_SPEED;
-	// 	mouse_pos_diff.x = 0;
-	// 	mouse_pos_diff.y = 0;
-	// }
-
-	if moved {
-		new_position = position + moved_by;
-		new_x = i32(new_position.x);
-		new_y = i32(new_position.y);	
-		if inRange(0, new_x, tile_map.width-1) && 
-		   inRange(0, new_y, tile_map.height-1) && 
-		   !tile_map.tiles[new_y][new_x].is_full {
-			position = new_position;
-		}
+	if mouse_moved {
+		if mouse_is_captured do onMouseMoved(&camera_controller);
+		else if middle_mouse_button.is_pressed && mouseOnMiniMap() do panMiniMap(&mini_map);
 	}
 	
-	if mouse_wheel_scrolled {
-		mouse_wheel_scrolled = false;
+	onUpdate2D(&camera_controller);
+	if moved { // Detect collisions:
+		if movement.x > 0 {
+			next_tile = &tile_map.tiles[i32(position.y)][i32(position.x + body_radius)];
+			if next_tile.is_full do position.x = f32(next_tile.bounds.left) - body_radius;
+		} else if movement.x < 0 {
+			next_tile = &tile_map.tiles[i32(position.y)][i32(position.x - body_radius)];
+			if next_tile.is_full do position.x = f32(next_tile.bounds.right) + body_radius;
+		}
+		
+		if movement.y < 0 {
+			next_tile = &tile_map.tiles[i32(position.y - body_radius)][i32(position.x)];
+			if next_tile.is_full do position.y = f32(next_tile.bounds.bottom) + body_radius;
+		} else if movement.y > 0 {
+			next_tile = &tile_map.tiles[i32(position.y + body_radius)][i32(position.x)];
+			if next_tile.is_full do position.y = f32(next_tile.bounds.top) - body_radius;
+		}
 
-		// -200  -150  -100  -50  0   50  100  150  200
-		//   8     6     4    2   1  1/2  1/4  1/6  1/8                 
-		if      mouse_wheel_scroll_amount == 0 do zoom = 1;
-		else if mouse_wheel_scroll_amount  > 0 do zoom = 50 / (2 * f64(mouse_wheel_scroll_amount));
-		else                                   do zoom =     (-2 * f64(mouse_wheel_scroll_amount)) / 50;
+		movement = position - old_position;
 	}
 
 	tile_map_changed = false;
-	if left_mouse_button.is_pressed && 
-		mouse_pos.x < TILE_SIZE*tile_map.width && 
-		mouse_pos.y < TILE_SIZE*tile_map.height {
+	if !mouse_is_captured {
+		if (left_mouse_button.is_pressed || 
+			right_mouse_button.is_pressed) &&
+			mouseOnMiniMap() {
+			tile_coords := mouse_pos;
+			tile_coords -= mini_map.pos^;
+			tile_pos: vec2 = {f32(tile_coords.x), f32(tile_coords.y)};
+			tile_pos -= mini_map.offset;
+			tile_pos /= mini_map.scale_factor;
+			tile_pos += position;
+			tile_coords = {i32(tile_pos.x), i32(tile_pos.y)};
+			tile_map.tiles[tile_coords.y][tile_coords.x].is_full = left_mouse_button.is_pressed;
+			tile_map_changed = true;
+		}
 
-		tile_map.tiles[mouse_pos.y/TILE_SIZE][mouse_pos.x/TILE_SIZE].is_full = true;
-		tile_map_changed = true;
-	}
-
-	if right_mouse_button.is_pressed &&
-		mouse_pos.x < (TILE_SIZE*tile_map.width) && 
-		mouse_pos.y < (TILE_SIZE*tile_map.height) {
-		
-		tile_map.tiles[mouse_pos.y/TILE_SIZE][mouse_pos.x/TILE_SIZE].is_full = false;
-		tile_map_changed = true;
 	}
 
 	if tile_map_changed do generateTileMapEdges(&tile_map);
-	if tile_map_changed || moved do transformTileMapEdges(&tile_map, position);
-	if tile_map_changed || moved || turned do castRays();
+	if tile_map_changed || moved {
+		moveTileMap(&tile_map, position);
+		moveMiniMap(&mini_map, movement * -mini_map.scale_factor);
+	}
+	if mouse_wheel_scrolled {
+		if mouse_is_captured do onMouseScrolled(&camera_controller);
+		else if mouseOnMiniMap() {
+			if ctrl_is_pressed do resizeMiniMapByMouseWheel(&mini_map);
+			else               do zoomMiniMap(&mini_map);
+		} else do mouse_wheel_scroll_amount = 0;
+	}
+	if turned do setFacing(&camera.facing, camera.xform.forward_direction^);
+	if turned || zoomed do generateRays(camera);
+	if tile_map_changed || moved || turned || zoomed do castRays(&tile_map);
+	if tile_map_changed || moved || turned || zoomed || mini_map.resized || mini_map.zoomed || mini_map.panned || mini_map.toggled do drawMiniMap(&mini_map);
 
 	ticks_before = getTicks();
-}
-
-
-A: vec2 = {100, 120};
-B: vec2 = {450, 380};
-C: vec2 = {320, 120};
-D: vec2 = {410, 370};
-P: vec2;
-R: f32 = 5;
-
-render2 :: proc() {
-	using camera.xform;
-	using frame_buffer;
-	fillRect(0, 0, width, height, BLACK, &bitmap);
-	drawLine(A, B, WHITE, &bitmap);
-	drawLine(C, D, WHITE, &bitmap);
-	fillCircle(A, R, GREY, &bitmap);
-	fillCircle(B, R, YELLOW, &bitmap);
-	fillCircle(C, R, BLUE, &bitmap);
-	fillCircle(D, R, GREEN, &bitmap);
-	if intersected do
-		fillCircle(P, R, RED, &bitmap);	
 }
 
 render :: proc() {
 	using render_timer;
 	using camera.xform;
 	using frame_buffer;
+
 	ticks_before = getTicks();
-	castRays();
-	ticks_after = getTicks();	
 
-	fillRect(0, 0, width, height, BLACK, &bitmap);
+	fillRect(&bitmap, 0, 0, width-1, height-1, BLACK);
 	drawWalls(&camera);
-
-	for row, y in &tile_map.tiles do
-		for tile, x in &row do
-			if tile.is_full do fillRect(tile.bounds.min*TILE_SIZE, tile.bounds.max*TILE_SIZE, BLUE, &bitmap);
-
-	padding: vec2i = {1, 1};
-
-	for ray in &rays do drawLine(TILE_SIZE*position, TILE_SIZE*ray.hit.position, GREY, &bitmap);
-	// for ray in &rays do drawLine(TILE_SIZE*position, TILE_SIZE*position + ray.direction*50, GREEN, &bitmap);
-	for edge in &tile_map.edges {
-		using edge;
-		drawLine(TILE_SIZE*from^, TILE_SIZE*to^, color, &bitmap);
-		fillRect(TILE_SIZE*from^ - padding, TILE_SIZE*from^ + padding, WHITE, &bitmap);
-		fillRect(TILE_SIZE*to^   - padding, TILE_SIZE*to^   + padding, WHITE, &bitmap);
+	if mini_map.is_visible {
+		drawBitmap(&mini_map.bitmap, &bitmap, mini_map.pos^);
+		drawRect(&bitmap, &mini_map.bounds, WHITE);
 	}
-	fillCircle(TILE_SIZE*position, 4, RED, &bitmap);
 
+	ticks_after = getTicks();
 	accumulateTimer(&render_timer);
 
-	if (ticks_after - ticks_of_last_report) >= ticks_per_second {
-		print(
-			"Ray-Casting",
-			// new_approach ? "(new):" : "(old)",
-			u64(
-				microseconds_per_tick * (
-					f64(accumulated_ticks) / 
-					f64(accumulated_frame_count)
-				)
-			),
-			"μs/f"
-		);
+	// if (ticks_after - ticks_of_last_report) >= ticks_per_second {
+	// 	print(
+	// 		"Ray-Casting",
+	// 		u64(
+	// 			microseconds_per_tick * (
+	// 				f64(accumulated_ticks) / 
+	// 				f64(accumulated_frame_count)
+	// 			)
+	// 		),
+	// 		"μs/f"
+	// 	);
 
-		accumulated_ticks = 0;
-		accumulated_frame_count = 0;
-		ticks_of_last_report = ticks_after;
-	}
+	// 	accumulated_ticks = 0;
+	// 	accumulated_frame_count = 0;
+	// 	ticks_of_last_report = ticks_after;
+	// }
 }
-
 
 initApplication :: proc(platformGetTicks: GetTicks, platformTicksPerSecond: u64) {
 	using camera.xform;
 	position = 10;
-	// intersected = lineSegmentsIntersect(A, B, C, D, &P);
+	toggle1 = true;
+	
 	initTimers(platformGetTicks, platformTicksPerSecond);
 	initFrameBuffer(&frame_buffer);
-	initFrameBuffer(&canvas);
-	initCamera(&camera);
-	initTileMap(&tile_map);
 
-	loadTextures();
+	initCamera(&camera);
+	initCameraController(&camera_controller.controller);
+	camera_controller.camera = &camera;
+	
+	initTileMap(&tile_map);
+	
+	for texture, i in &textures do readBitmapFromFile(texture_files[i], &texture, texture_bitmaps_data[i][:]);
 	readTileMapFromASCIIgrid(&tile_map, &TILE_MAP_ASCII_GRID);
 	generateTileMapEdges(&tile_map);
-	transformTileMapEdges(&tile_map, position);
+	moveTileMap(&tile_map, position);
+
+	initMiniMap(&mini_map, &tile_map, &position);
+
+	setRayCount(frame_buffer.width);
+	generateRays(&camera);
+	castRays(&tile_map);
+	drawMiniMap(&mini_map);
+	
 	UPDATE_INTERVAL = ticks_per_second / TARGET_FPS;
 }

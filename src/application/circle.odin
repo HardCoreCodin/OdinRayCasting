@@ -1,6 +1,6 @@
 package application
 
-_drawCircle2Di :: inline proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitmap) {
+_drawCircle2Di :: inline proc(using bitmap: ^Bitmap, Px, Py, R: i32, color: Color, opacity: u8 = 255) {
 	x, y, y2: i32;
 	r2 := R * R;
 	x2 := r2;
@@ -57,18 +57,26 @@ _drawCircle2Di :: inline proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitma
 		Ex2 += 1;
 	}
 }
-_drawCircle2Df :: inline proc(Px, Py, R: f32, color: Color, using bitmap: ^Bitmap) do _drawCircle2Di(i32(Px), i32(Py), i32(R), color, bitmap);
-_drawCircle2DVec2i :: inline proc(pos: vec2i, R: i32, color: Color, using bitmap: ^Bitmap) do _drawCircle2Di(pos.x, pos.y, R, color, bitmap);
-_drawCircle2DVec2f :: inline proc(pos: vec2,  R: f32, color: Color, using bitmap: ^Bitmap) do _drawCircle2Df(pos.x, pos.y, R, color, bitmap);
+_drawCircle2Df :: inline proc(bitmap: ^Bitmap, Px, Py, R: f32, color: Color, opacity: u8 = 255) do _drawCircle2Di(bitmap, i32(Px), i32(Py), i32(R), color, opacity);
+_drawCircle2DVec2i :: inline proc(bitmap: ^Bitmap, pos: vec2i, R: i32, color: Color, opacity: u8 = 255) do _drawCircle2Di(bitmap, pos.x, pos.y, R, color, opacity);
+_drawCircle2DVec2f :: inline proc(bitmap: ^Bitmap, pos: vec2,  R: f32, color: Color, opacity: u8 = 255) do _drawCircle2Df(bitmap, pos.x, pos.y, R, color, opacity);
 drawCircle :: proc{_drawCircle2Di, _drawCircle2Df, _drawCircle2DVec2i, _drawCircle2DVec2f};
 
-_fillCircle2Di :: inline proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitmap) {
+_fillCircle2Di :: inline proc(using bitmap: ^Bitmap, Px, Py, R: i32, color: Color, opacity: u8 = 255) {
+	pixel: Pixel = {color = color, opacity = opacity};
+
+	if R == 1 {
+		if inRange(0, Px, width-1) &&
+		   inRange(0, Py, height-1) do
+		   pixels[Py][Px] = pixel;
+		return;
+	}
+
 	x, y, y2: i32;
 	r2 := R * R;
 	x2 := r2;
 	x = R;
-	c := color;
-	
+
 	Sx1 := Px - R;
 	Ex1 := Px + R;
 	Sy1 := Py * width;
@@ -78,13 +86,13 @@ _fillCircle2Di :: inline proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitma
 	Ex2 := Px;
 	Sy2 := (Py - R) * width;
 	Ey2 := (Py + R) * width;
-
+	
 	for y <= x {
-		if Sy1 >= 0 && Sy1 < size do for x1 in max(Sx1, 0)..min(Ex1, width-1) do all_pixels[Sy1 + x1].color = c;
-		if Ey1 >= 0 && Ey1 < size do for x1 in max(Sx1, 0)..min(Ex1, width-1) do all_pixels[Ey1 + x1].color = c;
+		if Sy1 >= 0 && Sy1 < size do for x1 in max(Sx1, 0)..min(Ex1, width-1) do all_pixels[Sy1 + x1] = pixel;
+		if Ey1 >= 0 && Ey1 < size do for x1 in max(Sx1, 0)..min(Ex1, width-1) do all_pixels[Ey1 + x1] = pixel;
 		
-		if Sy2 >= 0 && Sy2 < size do for x2 in max(Sx2, 0)..min(Ex2, width-1) do all_pixels[Sy2 + x2].color = c;
-		if Ey2 >= 0 && Ey2 < size do for x2 in max(Sx2, 0)..min(Ex2, width-1) do all_pixels[Ey2 + x2].color = c; 
+		if Sy2 >= 0 && Sy2 < size do for x2 in max(Sx2, 0)..min(Ex2, width-1) do all_pixels[Sy2 + x2] = pixel;
+		if Ey2 >= 0 && Ey2 < size do for x2 in max(Sx2, 0)..min(Ex2, width-1) do all_pixels[Ey2 + x2] = pixel; 
 
 		if (x2 + y2) > r2 {
 			x -= 1;
@@ -107,9 +115,9 @@ _fillCircle2Di :: inline proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitma
 		Ex2 += 1;
 	}
 }
-_fillCircle2Df :: inline proc(Px, Py, R: f32, color: Color, using bitmap: ^Bitmap) do _fillCircle2Di(i32(Px), i32(Py), i32(R), color, bitmap);
-_fillCircle2DVec2i :: inline proc(pos: vec2i, R: i32, color: Color, using bitmap: ^Bitmap) do _fillCircle2Di(pos.x, pos.y, R, color, bitmap);
-_fillCircle2DVec2f :: inline proc(pos: vec2,  R: f32, color: Color, using bitmap: ^Bitmap) do _fillCircle2Df(pos.x, pos.y, R, color, bitmap);
+_fillCircle2Df :: inline proc(bitmap: ^Bitmap, Px, Py, R: f32, color: Color, opacity: u8 = 255) do _fillCircle2Di(bitmap, i32(Px), i32(Py), i32(R), color, opacity);
+_fillCircle2DVec2i :: inline proc(bitmap: ^Bitmap, pos: vec2i, R: i32, color: Color, opacity: u8 = 255) do _fillCircle2Di(bitmap, pos.x, pos.y, R, color, opacity);
+_fillCircle2DVec2f :: inline proc(bitmap: ^Bitmap, pos: vec2,  R: f32, color: Color, opacity: u8 = 255) do _fillCircle2Df(bitmap, pos.x, pos.y, R, color, opacity);
 fillCircle :: proc{_fillCircle2Di, _fillCircle2Df, _fillCircle2DVec2i, _fillCircle2DVec2f};
 
 drawCircleUnsafe :: proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitmap) {

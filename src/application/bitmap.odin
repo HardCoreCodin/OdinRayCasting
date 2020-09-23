@@ -67,6 +67,7 @@ printBitmap :: proc(using bm: ^Bitmap) {
 			else if G >= R && G >= B do fmt.printf(TEXT_COLOR__GREEN);
 			else if R >= G && R >= B do fmt.printf(TEXT_COLOR__RED);
 			else if B >= G && B >= R do fmt.printf(TEXT_COLOR__BLUE);
+			else do fmt.printf(TEXT_COLOR__MAG);
 
 			fmt.print('#');
 		}
@@ -92,18 +93,35 @@ drawBitmap :: proc(from, to: ^Bitmap, pos: vec2i) {
 		min(pos.y+from.height, to.height)
 	};
 
-	pixel: ^Pixel;
+	from_alpha, to_alpha: f32;
+	from_pixel, to_pixel: ^Pixel;
 	for y in to_start.y..<to_end.y {
 		for x in to_start.x..<to_end.x {
-			pixel = &from.pixels[y - pos.y][x - pos.x];
-			if pixel.opacity != 0 do to.pixels[y][x] = pixel^;
+			to_pixel := &to.pixels[y][x];
+			from_pixel = &from.pixels[y - pos.y][x - pos.x];
+
+			if from_pixel.opacity != 0 {
+				if from_pixel.opacity < 255 {
+					from_alpha = f32(from_pixel.opacity) / 255;
+					if to_pixel.opacity < 255 {
+						to_alpha = f32(to_pixel.opacity) / 255;
+						to_pixel.color.R = u8(min(255, f32(to_pixel.color.R) * to_alpha + f32(from_pixel.color.R) * from_alpha));
+						to_pixel.color.G = u8(min(255, f32(to_pixel.color.G) * to_alpha + f32(from_pixel.color.G) * from_alpha));
+						to_pixel.color.B = u8(min(255, f32(to_pixel.color.B) * to_alpha + f32(from_pixel.color.B) * from_alpha));
+						to_pixel.opacity = u8(min(1, to_alpha + from_alpha) * 255);
+					} else {
+						to_pixel.color.R = u8(min(255, f32(to_pixel.color.R) + f32(from_pixel.color.R) * from_alpha));
+						to_pixel.color.G = u8(min(255, f32(to_pixel.color.G) + f32(from_pixel.color.G) * from_alpha));
+						to_pixel.color.B = u8(min(255, f32(to_pixel.color.B) + f32(from_pixel.color.B) * from_alpha));
+					}
+				} else do to_pixel^ = from_pixel^;
+			}
 		} 
 	}
 }
 
-sampleBitmap :: proc(using bm: ^Bitmap, u, v: f32) -> Pixel {
-	return pixels[i32(v * f32(TEXTURE_HEIGHT))][i32(u * f32(TEXTURE_WIDTH))];
-}
+sampleBitmap :: inline proc(using bm: ^Bitmap, u, v: f32, pixel: ^Pixel) do
+	pixel^ = pixels[i32(v * f32(TEXTURE_HEIGHT))][i32(u * f32(TEXTURE_WIDTH))];
 
 BMP_FileHeader :: struct #packed {
 	file_type : u16,  // Type of the file

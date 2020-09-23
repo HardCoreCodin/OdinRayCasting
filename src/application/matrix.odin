@@ -44,6 +44,38 @@ transposeMat4 :: inline proc(m: ^mat4, using out: ^mat4) {
 }
 transposeMatrix :: proc{transposeMat2, transposeMat3, transposeMat4};
 
+mulVec2Mat2 :: inline proc(v: vec2, using matrix: ^mat2) -> vec2 {
+    m: mat2;
+    transposeMat2(matrix, &m);
+
+    return {
+        dot2(v, m.X),
+        dot2(v, m.Y)
+    };
+}
+mulVec3Mat3 :: inline proc(v: vec3, using matrix: ^mat3) -> vec3 {
+    m: mat3;
+    transposeMat3(matrix, &m);
+    
+    return {
+        dot3(v, m.X),
+        dot3(v, m.Y),
+        dot3(v, m.Z)
+    };
+}
+mulVec4Mat4 :: inline proc(v: vec4, using matrix: ^mat4) -> vec4 {
+    m: mat4;
+    transposeMat4(matrix, &m);
+    
+    return {
+        dot4(v, m.X),
+        dot4(v, m.Y),
+        dot4(v, m.Z),
+        dot4(v, m.W)
+    };
+}
+multiplyVectorByMatrix :: proc{mulVec2Mat2, mulVec3Mat3, mulVec4Mat4};
+
 imulVec2Mat2 :: inline proc(out: ^vec2, using matrix: ^mat2) {
     v := out^;
     m: mat2;
