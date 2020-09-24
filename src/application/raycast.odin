@@ -8,14 +8,19 @@ RayHit :: struct {
     tile: ^Tile,
     edge: ^TileEdge
 }
-Ray :: struct { 
-    using facing: Facing,
-    
+Ray :: struct {     
     origin: ^vec2,
     direction: vec2,
     
     rise_over_run,
     run_over_rise: f32,
+
+    is_vertical,
+    is_horizontal,
+    is_facing_up,
+    is_facing_down,
+    is_facing_left,
+    is_facing_right: bool,
 
     hit: RayHit
 }
@@ -80,10 +85,15 @@ generateRays :: proc(using cam: ^Camera2D) {
         using ray;
         origin = &position;
         direction = norm(ray_direction);
+        is_vertical     = direction.x == 0;
+        is_horizontal   = direction.y == 0;
+        is_facing_left  = direction.x < 0;
+        is_facing_up    = direction.y < 0;
+        is_facing_right = direction.x > 0;
+        is_facing_down  = direction.y > 0;
         rise_over_run = direction.y / direction.x;
         run_over_rise = 1 / rise_over_run;
         ray_direction += right_direction^;
-        setFacing(&facing, direction);
     }
 }
 

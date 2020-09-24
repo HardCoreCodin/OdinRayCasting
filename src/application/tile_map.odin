@@ -26,7 +26,7 @@ Tile :: struct {
 }
 TileRow :: []Tile;
 
-TileEdge :: struct {using facing: Facing, 
+TileEdge :: struct { 
 	local: struct {
 		from, to: ^vec2,
 		is_above,
@@ -41,6 +41,12 @@ TileEdge :: struct {using facing: Facing,
 	length: i32,
 
 	is_visible,
+    is_vertical,
+    is_horizontal,
+    is_facing_up,
+    is_facing_down,
+    is_facing_left,
+    is_facing_right,
 	is_facing_forward: bool
 }
 

@@ -28,16 +28,16 @@ mini_map: MiniMap;
 tile_map: TileMap;
 
 TILE_MAP_ASCII_GRID := `
-1111111111111111111111111111111111111111
-1______________________________________1
-1______________________________________1
-1______________________________________1
-1______________________________________1
-1______________________________________1
-1______________________________________1
-1______________________________________1
-1______________________________________1
-1______________________________________1
+2222222222211111111111111111111111111111
+2_________2____________________________1
+2__2___22_2____________________________1
+222222_2222____________________________1
+2__2_____22____________________________1
+2____22___2____________________________1
+2_____2_222____________________________1
+2_22222__22____________________________1
+2_________2____________________________1
+22222222222____________________________1
 1______________________________________1
 1___________22222223___________________1
 1__________________3___________________1
@@ -87,7 +87,7 @@ resize :: proc(new_width, new_height: i32) {
 	render();
 }
 
-mouseOnMiniMap :: inline proc() -> bool do return mini_map.is_visible && inBounds(mini_map.bounds, mouse_pos);
+mouseOnMiniMap :: inline proc() -> bool do return mini_map.is_visible && inBounds(mini_map.world_bounds, mouse_pos);
 
 update :: proc() {
 	using frame_buffer;
@@ -96,8 +96,8 @@ update :: proc() {
 	using camera_controller;
 
 	mini_map.panned = false;
-	mini_map.zoomed = false;
-	mini_map.resized = false;
+	mini_map.zoom.changed = false;
+	mini_map.resize.changed = false;
 	mini_map.toggled = mini_map.is_visible != toggle1 || mini_map.is_debug_visible != toggle2;
 	mini_map.is_visible = toggle1;
 	mini_map.is_debug_visible = toggle2;
@@ -108,7 +108,15 @@ update :: proc() {
 
 	if mouse_moved {
 		if mouse_is_captured do onMouseMoved(&camera_controller);
-		else if middle_mouse_button.is_pressed && mouseOnMiniMap() do panMiniMap(&mini_map);
+		else if !mouse_is_captured && middle_mouse_button.is_pressed && mouseOnMiniMap() {
+			if ctrl_is_pressed {
+				mini_map.world_bounds.min += mouse_pos_diff;
+				mini_map.world_bounds.max += mouse_pos_diff;
+				mouse_pos_diff.x = 0;
+			    mouse_pos_diff.y = 0;
+			    mouse_moved = false;
+			} else do panMiniMap(&mini_map);
+		}
 	}
 	
 	onUpdate2D(&camera_controller);
@@ -144,10 +152,12 @@ update :: proc() {
 			tile_pos /= mini_map.scale_factor;
 			tile_pos += position;
 			tile_coords = {i32(tile_pos.x), i32(tile_pos.y)};
-			tile_map.tiles[tile_coords.y][tile_coords.x].is_full = left_mouse_button.is_pressed;
-			tile_map_changed = true;
+			if !(tile_coords.x == i32(position.x) && 
+			     tile_coords.y == i32(position.y)) {
+				tile_map.tiles[tile_coords.y][tile_coords.x].is_full = left_mouse_button.is_pressed;
+				tile_map_changed = true;
+			}
 		}
-
 	}
 
 	if tile_map_changed do generateTileMapEdges(&tile_map);
@@ -162,10 +172,13 @@ update :: proc() {
 			else               do zoomMiniMap(&mini_map);
 		} else do mouse_wheel_scroll_amount = 0;
 	}
-	if turned do setFacing(&camera.facing, camera.xform.forward_direction^);
 	if turned || zoomed do generateRays(camera);
 	if tile_map_changed || moved || turned || zoomed do castRays(&tile_map);
-	if tile_map_changed || moved || turned || zoomed || mini_map.resized || mini_map.zoomed || mini_map.panned || mini_map.toggled do drawMiniMap(&mini_map);
+	if tile_map_changed || moved || turned || zoomed || 
+	   mini_map.resize.changed || 
+	   mini_map.zoom.changed || 
+	   mini_map.panned || 
+	   mini_map.toggled do drawMiniMap(&mini_map);
 
 	ticks_before = getTicks();
 }
@@ -181,7 +194,7 @@ render :: proc() {
 	drawWalls(&camera);
 	if mini_map.is_visible {
 		drawBitmap(&mini_map.bitmap, &bitmap, mini_map.pos^);
-		drawRect(&bitmap, &mini_map.bounds, WHITE);
+		drawRect(&bitmap, &mini_map.world_bounds, WHITE);
 	}
 
 	ticks_after = getTicks();
@@ -207,7 +220,7 @@ render :: proc() {
 
 initApplication :: proc(platformGetTicks: GetTicks, platformTicksPerSecond: u64) {
 	using camera.xform;
-	position = 10;
+	position = 20;
 	toggle1 = true;
 	
 	initTimers(platformGetTicks, platformTicksPerSecond);

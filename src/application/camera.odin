@@ -1,35 +1,15 @@
 package application
 
-Facing :: struct {
-    is_vertical,
-    is_horizontal,
-    is_facing_up,
-    is_facing_down,
-    is_facing_left,
-    is_facing_right: bool
-}
-setFacing :: proc(using facing: ^Facing, direction: vec2) {
-    is_vertical     = direction.x == 0;
-    is_horizontal   = direction.y == 0;
-    is_facing_left  = direction.x < 0;
-    is_facing_up    = direction.y < 0;
-    is_facing_right = direction.x > 0;
-    is_facing_down  = direction.y > 0;
-}
-
-Camera   :: struct {using facing: Facing, focal_length: f32};
-Camera2D :: struct {using base: Camera, xform: xform2};
-Camera3D :: struct {using base: Camera, xform: xform3};
+Camera2D :: struct {focal_length: f32, xform: xform2};
+Camera3D :: struct {focal_length: f32, xform: xform3};
 
 initCamera2D :: proc(using cam: ^Camera2D, initial_focal_length: f32 = 1) {
     focal_length = initial_focal_length;
     initXform(&xform);
-    setFacing(&facing, xform.forward_direction^);
 }
 initCamera3D :: proc(using cam: ^Camera3D, initial_focal_length: f32 = 1) {
     focal_length = initial_focal_length;
     initXform(&xform);
-    // setFacing(&facing, xform.forward_direction^);
 }
 initCamera :: proc{initCamera2D, initCamera3D};
 
@@ -90,7 +70,7 @@ onMouseMoved :: proc(using ctrl: ^CameraController2D) {
     turned = true;
     
     rotate(&camera.xform,
-         f32(mouse_pos_diff.x) * turn_speed,
+        -f32(mouse_pos_diff.x) * turn_speed,
         -f32(mouse_pos_diff.y) * turn_speed
     );
     
@@ -127,10 +107,10 @@ onUpdate3D :: proc(using ctrl: ^CameraController3D) {
 
 onUpdate2D :: proc(using ctrl: ^CameraController2D) {    
     target_velocity = 0;
-    if move_right     do target_velocity.x += max_velocity;
-    if move_left      do target_velocity.x -= max_velocity;
-    if move_forward   do target_velocity.y += max_velocity;
-    if move_backward  do target_velocity.y -= max_velocity;
+    if move_right     do target_velocity.y += max_velocity;
+    if move_left      do target_velocity.y -= max_velocity;
+    if move_forward   do target_velocity.x += max_velocity;
+    if move_backward  do target_velocity.x -= max_velocity;
 
     // Update the current velocity:
     using update_timer;
@@ -149,6 +129,6 @@ onUpdate2D :: proc(using ctrl: ^CameraController2D) {
     }
     if turn_right || turn_left {
         turned = true;
-        rotate(&camera.xform, turn_left ? -delta_time*2 : delta_time*2, 0);
+        rotate(&camera.xform, turn_left ? delta_time*2 : delta_time*-2, 0);
     }
 }

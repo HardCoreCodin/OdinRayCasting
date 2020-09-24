@@ -101,7 +101,7 @@ WndProc:: proc "std" (hWnd: HWND, message: UINT, wParam: WPARAM, lParam: LPARAM)
 		case WM_RBUTTONUP:   setMouseButtonUp(  &right_mouse_button, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
 
 		case WM_MOUSEWHEEL:
-			setMouseWheel(f32(GET_WHEEL_DELTA_WPARAM(wParam)) / f32(WHEEL_DELTA));
+			setMouseWheel(f32(GET_WHEEL_DELTA_WPARAM(wParam)) / f32(WHEEL_DELTA*4));
 
 		 case WM_INPUT:
 		 	using raw_inputs.data.mouse;

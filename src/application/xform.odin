@@ -45,8 +45,8 @@ initXform2 :: proc(using out: ^xform2) {
     setMat2ToIdentity(&rotation_matrix_inverted);
 
     using rotation_matrix;
-    right_direction   = &X;
-    forward_direction = &Y;
+    forward_direction = &X;
+    right_direction   = &Y;
 }
 initXform3 :: proc(using out: ^xform3) {
     setMat3ToIdentity(&matrix);

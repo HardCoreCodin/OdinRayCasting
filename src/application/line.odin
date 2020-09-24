@@ -75,10 +75,10 @@ _drawLine2Di :: inline proc(using bitmap: ^Bitmap, x0, y0, x1, y1: i32, color: C
     for current1 != end {
         current1 += inc1;
         if is_steap {
-        	if index > 0 && _inRangeI(0, current1, height-1) && _inRangeI(0, current2, width-1) do
+        	if _inRangeI(0, current1, height-1) && _inRangeI(0, current2, width-1) do
         		all_pixels[index] = pixel;
         } else
-        	if index > 0 &&_inRangeI(0, current2, height-1) && _inRangeI(0, current1, width-1) do
+        	if _inRangeI(0, current2, height-1) && _inRangeI(0, current1, width-1) do
         		all_pixels[index] = pixel;
         
         index += index_inc1;
@@ -88,6 +88,7 @@ _drawLine2Di :: inline proc(using bitmap: ^Bitmap, x0, y0, x1, y1: i32, color: C
             index += index_inc2;
             current2 += inc2;
         }
+        if !_inRangeI(0, index, size-1) do return;
     }
 }
 _drawLine2Df :: inline proc(using bitmap: ^Bitmap, x0, y0, x1, y1: f32, color: Color, opacity: u8 = 255) do _drawLine2Di(bitmap, i32(x0), i32(y0), i32(x1), i32(y1), color, opacity);
