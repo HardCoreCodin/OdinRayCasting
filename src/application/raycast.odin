@@ -27,23 +27,31 @@ Ray :: struct {
 all_rays: [MAX_BITMAP_WIDTH]Ray;
 rays: []Ray;
 
-all_vertical_distances: [MAX_BITMAP_HEIGHT/2]f32;
-vertical_distances: []f32;
 
-VerticalRayHit :: struct {
-    floor_texture, ceiling_texture: ^Bitmap,
+VerticalHitInfo :: struct {
+    distance, dim_factor: f32
+}
+all_vertical_hit_infos: [MAX_BITMAP_HEIGHT/2]VerticalHitInfo;
+vertical_hit_infos: []VerticalHitInfo;
+
+VerticalHit :: struct {
+    info: ^VerticalHitInfo,
+    floor_texture, 
+    ceiling_texture: ^Bitmap,
+    
     direction: vec2,
     tile_coords: vec2i,
+    
     u, v: f32,
     found: bool
 }
 
-VerticalRayHitRow :: []VerticalRayHit;
-VerticalRayHitGrid :: []VerticalRayHitRow;
+VerticalHitRow :: []VerticalHit;
+VerticalHitGrid :: []VerticalHitRow;
 
-all_vertical_ray_hits: VerticalRayHitRow;
-all_vertical_ray_hit_rows: [MAX_BITMAP_HEIGHT/2]VerticalRayHitRow;
-vertical_ray_hits: VerticalRayHitGrid;
+all_vertical_hits: VerticalHitRow;
+all_vertical_hit_rows: [MAX_BITMAP_HEIGHT/2]VerticalHitRow;
+vertical_hits: VerticalHitGrid;
 
 distance_factor: f32 = DIM_FACTOR_RANGE / MAX_TILE_MAP_VIEW_DISTANCE;
 half_width,
@@ -58,26 +66,26 @@ onResize :: proc() {
     half_height_int := height / 2;
 
     rays = all_rays[:width];
-    vertical_distances = all_vertical_distances[:half_height_int];
+    vertical_hit_infos = all_vertical_hit_infos[:half_height_int];
 
     start: i32;
     end := width;
 
     for y in 0..<half_height_int {
-        all_vertical_ray_hit_rows[y] = all_vertical_ray_hits[start:end];
+        all_vertical_hit_rows[y] = all_vertical_hits[start:end];
         start += width;
         end   += width;
     }
 
-    vertical_ray_hits = all_vertical_ray_hit_rows[:half_height_int];
+    vertical_hits = all_vertical_hit_rows[:half_height_int];
 
     generateRays();
     castRays(&tile_map);
 }
 
 initRayCast :: proc() {
-    bits := new([MAX_BITMAP_WIDTH*(MAX_BITMAP_HEIGHT*2)]VerticalRayHit);
-    all_vertical_ray_hits = bits^[:];
+    bits := new([MAX_BITMAP_WIDTH*(MAX_BITMAP_HEIGHT*2)]VerticalHit);
+    all_vertical_hits = bits^[:];
     onResize();
 }
 
@@ -93,13 +101,17 @@ generateRays :: proc() {
     ray_direction *= half_width;
     ray_direction += right_direction^ / 2;
 
-    factor := 1 / half_height;
+    num_vertical_hit_infos := len(vertical_hit_infos); 
 
-    num_vertical_distances := len(vertical_distances); 
-    max_distance := half_height * camera.focal_length / 2;
+    vertical_hit_info: ^VerticalHitInfo;
+    for y in 1..num_vertical_hit_infos {
+        vertical_hit_info = &vertical_hit_infos[num_vertical_hit_infos - y];
+        using vertical_hit_info;
+        distance = 1 / (2 * f32(y));
+        dim_factor = 1 - distance * half_height * distance_factor + MIN_DIM_FACTOR;
+    }
 
-    for y in 1..num_vertical_distances do vertical_distances[num_vertical_distances - y] = max_distance / f32(y);
-
+    vertical_hit: ^VerticalHit;
     for ray, x in &rays {
         using ray;
         origin = &position;
@@ -114,8 +126,11 @@ generateRays :: proc() {
         run_over_rise = 1 / rise_over_run;
         ray_direction += right_direction^;
 
-        for vertical_distance, y in &vertical_distances do 
-            vertical_ray_hits[y][x].direction = ray_direction * vertical_distance * factor;
+        for info, y in &vertical_hit_infos {
+            vertical_hit = &vertical_hits[y][x];
+            vertical_hit.direction = ray_direction * info.distance;
+            vertical_hit.info = &info;
+        }
     }
 }
 
@@ -172,8 +187,8 @@ castRays :: inline proc(using tm: ^TileMap) {
     pos: vec2;
     using camera.xform;
 
-    for vertical_hit_row in &vertical_ray_hits {
-        for hit in &vertical_hit_row {
+    for row in &vertical_hits {
+        for hit in &row {
             using hit;
             pos = position + direction;
             found = inRange(0, pos.x, f32(width-1)) &&
@@ -221,29 +236,34 @@ drawWalls :: proc(using cam: ^Camera2D) {
     distance, dim_factor, u, v: f32;   
     max_distance := half_width * focal_length;
 
-    vertical_hit: ^VerticalRayHit;
+    vertical_hit: ^VerticalHit;
     texture: ^Bitmap;
     pixel: Pixel;
 
+    floor_pixel_offset := size - width;
+    ceiling_pixel_offset: i32;
 
-    for vertical_hit_row, y in &vertical_ray_hits {
+    for vertical_hit_row, y in &vertical_hits {
         for vertical_hit, x in &vertical_hit_row {
             if !vertical_hit.found do continue;
 
-            dim_factor = 1 - vertical_distances[y] * distance_factor + MIN_DIM_FACTOR;
-
-            sampleBitmap(ceiling_texture, vertical_hit.u, vertical_hit.v, &pixel);
-            pixel.color.R = u8(clamp(dim_factor * f32(pixel.color.R), 0, MAX_COLOR_VALUE));
-            pixel.color.G = u8(clamp(dim_factor * f32(pixel.color.G), 0, MAX_COLOR_VALUE));
-            pixel.color.B = u8(clamp(dim_factor * f32(pixel.color.B), 0, MAX_COLOR_VALUE));
-            pixels[y][x] = pixel;
+            dim_factor = vertical_hit.info.dim_factor;
 
             sampleBitmap(floor_texture, vertical_hit.u, vertical_hit.v, &pixel);
             pixel.color.R = u8(clamp(dim_factor * f32(pixel.color.R), 0, MAX_COLOR_VALUE));
             pixel.color.G = u8(clamp(dim_factor * f32(pixel.color.G), 0, MAX_COLOR_VALUE));
             pixel.color.B = u8(clamp(dim_factor * f32(pixel.color.B), 0, MAX_COLOR_VALUE));
-            pixels[height - i32(y) - 1][x] = pixel;
+            all_pixels[floor_pixel_offset + i32(x)] = pixel;
+
+            sampleBitmap(ceiling_texture, vertical_hit.u, vertical_hit.v, &pixel);
+            pixel.color.R = u8(clamp(dim_factor * f32(pixel.color.R), 0, MAX_COLOR_VALUE));
+            pixel.color.G = u8(clamp(dim_factor * f32(pixel.color.G), 0, MAX_COLOR_VALUE));
+            pixel.color.B = u8(clamp(dim_factor * f32(pixel.color.B), 0, MAX_COLOR_VALUE));
+            all_pixels[ceiling_pixel_offset + i32(x)] = pixel;
         }
+
+        floor_pixel_offset   -= width;
+        ceiling_pixel_offset += width;
     }
 
     for ray, x in &rays {
