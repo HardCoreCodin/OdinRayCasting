@@ -80,9 +80,7 @@ frame_buffer: FrameBuffer;
 
 resize :: proc(new_width, new_height: i32) {
 	resizeFrameBuffer(new_width, new_height, &frame_buffer);
-	setRayCount(new_width);
-	generateRays(&camera);
-	castRays(&tile_map);
+	onResize();
 	update();
 	render();
 }
@@ -166,13 +164,15 @@ update :: proc() {
 		moveMiniMap(&mini_map, movement * -mini_map.scale_factor);
 	}
 	if mouse_wheel_scrolled {
-		if mouse_is_captured do onMouseScrolled(&camera_controller);
-		else if mouseOnMiniMap() {
+		if mouse_is_captured {
+			onMouseScrolled(&camera_controller);
+			onFocalLengthChanged();
+		} else if mouseOnMiniMap() {
 			if ctrl_is_pressed do resizeMiniMapByMouseWheel(&mini_map);
 			else               do zoomMiniMap(&mini_map);
 		} else do mouse_wheel_scroll_amount = 0;
 	}
-	if turned || zoomed do generateRays(camera);
+	if turned || zoomed do generateRays();
 	if tile_map_changed || moved || turned || zoomed do castRays(&tile_map);
 	if tile_map_changed || moved || turned || zoomed || 
 	   mini_map.resize.changed || 
@@ -190,7 +190,7 @@ render :: proc() {
 
 	ticks_before = getTicks();
 
-	fillRect(&bitmap, 0, 0, width-1, height-1, BLACK);
+	// fillRect(&bitmap, 0, 0, width-1, height-1, BLACK);
 	drawWalls(&camera);
 	if mini_map.is_visible {
 		drawBitmap(&mini_map.bitmap, &bitmap, mini_map.pos^);
@@ -200,22 +200,22 @@ render :: proc() {
 	ticks_after = getTicks();
 	accumulateTimer(&render_timer);
 
-	// if (ticks_after - ticks_of_last_report) >= ticks_per_second {
-	// 	print(
-	// 		"Ray-Casting",
-	// 		u64(
-	// 			microseconds_per_tick * (
-	// 				f64(accumulated_ticks) / 
-	// 				f64(accumulated_frame_count)
-	// 			)
-	// 		),
-	// 		"μs/f"
-	// 	);
+	if (ticks_after - ticks_of_last_report) >= ticks_per_second {
+		print(
+			"Ray-Casting",
+			u64(
+				microseconds_per_tick * (
+					f64(accumulated_ticks) / 
+					f64(accumulated_frame_count)
+				)
+			),
+			"μs/f"
+		);
 
-	// 	accumulated_ticks = 0;
-	// 	accumulated_frame_count = 0;
-	// 	ticks_of_last_report = ticks_after;
-	// }
+		accumulated_ticks = 0;
+		accumulated_frame_count = 0;
+		ticks_of_last_report = ticks_after;
+	}
 }
 
 initApplication :: proc(platformGetTicks: GetTicks, platformTicksPerSecond: u64) {
@@ -238,10 +238,7 @@ initApplication :: proc(platformGetTicks: GetTicks, platformTicksPerSecond: u64)
 	moveTileMap(&tile_map, position);
 
 	initMiniMap(&mini_map, &tile_map, &position);
-
-	setRayCount(frame_buffer.width);
-	generateRays(&camera);
-	castRays(&tile_map);
+	initRayCast();
 	drawMiniMap(&mini_map);
 	
 	UPDATE_INTERVAL = ticks_per_second / TARGET_FPS;

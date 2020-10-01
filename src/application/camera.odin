@@ -29,7 +29,7 @@ initCameraController :: proc(ctrl: ^CameraController,
     max_velocity: f32 = 5,
     max_acceleration: f32 = 20,
 
-    turn_speed: f32 = 0.002) {
+    turn_speed: f32 = 0.008) {
 
     ctrl.max_velocity = max_velocity;
     ctrl.max_acceleration = max_acceleration;
@@ -129,6 +129,6 @@ onUpdate2D :: proc(using ctrl: ^CameraController2D) {
     }
     if turn_right || turn_left {
         turned = true;
-        rotate(&camera.xform, turn_left ? delta_time*2 : delta_time*-2, 0);
+        rotate(&camera.xform, turn_left ? delta_time*5 : delta_time*-5, 0);
     }
 }

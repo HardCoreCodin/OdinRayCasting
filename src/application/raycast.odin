@@ -27,6 +27,98 @@ Ray :: struct {
 all_rays: [MAX_BITMAP_WIDTH]Ray;
 rays: []Ray;
 
+all_vertical_distances: [MAX_BITMAP_HEIGHT/2]f32;
+vertical_distances: []f32;
+
+VerticalRayHit :: struct {
+    floor_texture, ceiling_texture: ^Bitmap,
+    direction: vec2,
+    tile_coords: vec2i,
+    u, v: f32,
+    found: bool
+}
+
+VerticalRayHitRow :: []VerticalRayHit;
+VerticalRayHitGrid :: []VerticalRayHitRow;
+
+all_vertical_ray_hits: VerticalRayHitRow;
+all_vertical_ray_hit_rows: [MAX_BITMAP_HEIGHT/2]VerticalRayHitRow;
+vertical_ray_hits: VerticalRayHitGrid;
+
+distance_factor: f32 = DIM_FACTOR_RANGE / MAX_TILE_MAP_VIEW_DISTANCE;
+half_width,
+half_height: f32;
+
+onResize :: proc() {
+    using frame_buffer;
+
+    half_width = f32(width) / 2;
+    half_height = f32(height) / 2;
+
+    half_height_int := height / 2;
+
+    rays = all_rays[:width];
+    vertical_distances = all_vertical_distances[:half_height_int];
+
+    start: i32;
+    end := width;
+
+    for y in 0..<half_height_int {
+        all_vertical_ray_hit_rows[y] = all_vertical_ray_hits[start:end];
+        start += width;
+        end   += width;
+    }
+
+    vertical_ray_hits = all_vertical_ray_hit_rows[:half_height_int];
+
+    generateRays();
+    castRays(&tile_map);
+}
+
+initRayCast :: proc() {
+    bits := new([MAX_BITMAP_WIDTH*(MAX_BITMAP_HEIGHT*2)]VerticalRayHit);
+    all_vertical_ray_hits = bits^[:];
+    onResize();
+}
+
+onFocalLengthChanged :: proc() {
+    generateRays();
+}
+
+generateRays :: proc() {
+    using camera;
+    using xform;
+    ray_direction := forward_direction^ * focal_length;
+    ray_direction -= right_direction^;
+    ray_direction *= half_width;
+    ray_direction += right_direction^ / 2;
+
+    factor := 1 / half_height;
+
+    num_vertical_distances := len(vertical_distances); 
+    max_distance := half_height * camera.focal_length / 2;
+
+    for y in 1..num_vertical_distances do vertical_distances[num_vertical_distances - y] = max_distance / f32(y);
+
+    for ray, x in &rays {
+        using ray;
+        origin = &position;
+        direction = norm(ray_direction);
+        is_vertical     = direction.x == 0;
+        is_horizontal   = direction.y == 0;
+        is_facing_left  = direction.x < 0;
+        is_facing_up    = direction.y < 0;
+        is_facing_right = direction.x > 0;
+        is_facing_down  = direction.y > 0;
+        rise_over_run = direction.y / direction.x;
+        run_over_rise = 1 / rise_over_run;
+        ray_direction += right_direction^;
+
+        for vertical_distance, y in &vertical_distances do 
+            vertical_ray_hits[y][x].direction = ray_direction * vertical_distance * factor;
+    }
+}
+
 rayIntersectsWithEdge :: proc(ray: ^Ray, edge: ^TileEdge, hit: ^RayHit) -> bool {
     hit.edge = edge;
     using edge.local;
@@ -74,36 +166,29 @@ castRay :: proc(using ray: ^Ray, using tm: ^TileMap) {
     tile_fraction = edge_fraction - f32(i32(edge_fraction));
 }
 
-generateRays :: proc(using cam: ^Camera2D) {
-    using xform;
-    ray_direction := forward_direction^ * focal_length;
-    ray_direction -= right_direction^;
-    ray_direction *= f32(len(rays)) / 2;
-    ray_direction += right_direction^ / 2;
-
-    for ray in &rays {
-        using ray;
-        origin = &position;
-        direction = norm(ray_direction);
-        is_vertical     = direction.x == 0;
-        is_horizontal   = direction.y == 0;
-        is_facing_left  = direction.x < 0;
-        is_facing_up    = direction.y < 0;
-        is_facing_right = direction.x > 0;
-        is_facing_down  = direction.y > 0;
-        rise_over_run = direction.y / direction.x;
-        run_over_rise = 1 / rise_over_run;
-        ray_direction += right_direction^;
-    }
-}
-
-setRayCount :: inline proc(count: i32) {
-    rays = all_rays[:count];
-}
-
-castRays :: inline proc(tm: ^TileMap) {
+castRays :: inline proc(using tm: ^TileMap) {
     for ray in &rays do castRay(&ray, tm);
-    // for ray in &rays do castRayWolf3D(&ray);
+
+    pos: vec2;
+    using camera.xform;
+
+    for vertical_hit_row in &vertical_ray_hits {
+        for hit in &vertical_hit_row {
+            using hit;
+            pos = position + direction;
+            found = inRange(0, pos.x, f32(width-1)) &&
+                    inRange(0, pos.y, f32(height-1));
+
+            if found {
+                tile_coords.x = i32(pos.x);
+                tile_coords.y = i32(pos.y);
+                // floor_texture   = &textures[tiles[tile_coords.y][tile_coords.x].texture_id];
+                // ceiling_texture = &textures[tiles[tile_coords.y][tile_coords.x].texture_id];
+                u = pos.x - f32(tile_coords.x);
+                v = pos.y - f32(tile_coords.y);
+            }
+        } 
+    }
 }
 
 CEILING_COLOR: Color = {
@@ -121,6 +206,9 @@ MIN_DIM_FACTOR :: 0.1;
 MAX_DIM_FACTOR :: 2;
 DIM_FACTOR_RANGE :: MAX_DIM_FACTOR - MIN_DIM_FACTOR;
 
+floor_texture:= &textures[7];
+ceiling_texture:= &textures[3];
+
 drawWalls :: proc(using cam: ^Camera2D) {
     using xform;
     using frame_buffer;
@@ -130,13 +218,33 @@ drawWalls :: proc(using cam: ^Camera2D) {
     column_height: i32;
 
     texel_height,
-    distance, dim_factor, u, v: f32;
-    tiles_to_projection_plane := f32(width / 2) * focal_length;
+    distance, dim_factor, u, v: f32;   
+    max_distance := half_width * focal_length;
 
+    vertical_hit: ^VerticalRayHit;
     texture: ^Bitmap;
     pixel: Pixel;
 
-    distance_factor: f32 = DIM_FACTOR_RANGE / MAX_TILE_MAP_VIEW_DISTANCE;
+
+    for vertical_hit_row, y in &vertical_ray_hits {
+        for vertical_hit, x in &vertical_hit_row {
+            if !vertical_hit.found do continue;
+
+            dim_factor = 1 - vertical_distances[y] * distance_factor + MIN_DIM_FACTOR;
+
+            sampleBitmap(ceiling_texture, vertical_hit.u, vertical_hit.v, &pixel);
+            pixel.color.R = u8(clamp(dim_factor * f32(pixel.color.R), 0, MAX_COLOR_VALUE));
+            pixel.color.G = u8(clamp(dim_factor * f32(pixel.color.G), 0, MAX_COLOR_VALUE));
+            pixel.color.B = u8(clamp(dim_factor * f32(pixel.color.B), 0, MAX_COLOR_VALUE));
+            pixels[y][x] = pixel;
+
+            sampleBitmap(floor_texture, vertical_hit.u, vertical_hit.v, &pixel);
+            pixel.color.R = u8(clamp(dim_factor * f32(pixel.color.R), 0, MAX_COLOR_VALUE));
+            pixel.color.G = u8(clamp(dim_factor * f32(pixel.color.G), 0, MAX_COLOR_VALUE));
+            pixel.color.B = u8(clamp(dim_factor * f32(pixel.color.B), 0, MAX_COLOR_VALUE));
+            pixels[height - i32(y) - 1][x] = pixel;
+        }
+    }
 
     for ray, x in &rays {
         using ray;
@@ -148,31 +256,25 @@ drawWalls :: proc(using cam: ^Camera2D) {
         
         dim_factor = 1 - distance * distance_factor + MIN_DIM_FACTOR;
 
-        column_height = i32(tiles_to_projection_plane / distance);
+        column_height = i32(max_distance / distance);
 
         top    = column_height < height ? (height - column_height) / 2 : 0;
         bottom = column_height < height ? (height + column_height) / 2 : height;
 
-
-        // Draw the floor and ceiling
-        drawVLine2D(&bitmap, 0     , top   , i32(x), CEILING_COLOR);
-        // drawVLine2D(&bitmap, top   , bottom, i32(x), RED);
-        drawVLine2D(&bitmap, bottom, height, i32(x), FLOOR_COLOR);
-
         texel_height = 1 / f32(column_height);
         v = column_height > height ? f32((column_height - height) / 2) * texel_height : 0;
+        u = hit.tile_fraction;
         
-        // Draw the wall
         pixel_offset = top * width + i32(x);
-        for y in top..<bottom {
-            sampleBitmap(texture, hit.tile_fraction, v, &pixel);
+        for y in top..<bottom {            
+            sampleBitmap(texture, u, v, &pixel);
 
             pixel.color.R = u8(clamp(dim_factor * f32(pixel.color.R), 0, MAX_COLOR_VALUE));
             pixel.color.G = u8(clamp(dim_factor * f32(pixel.color.G), 0, MAX_COLOR_VALUE));
             pixel.color.B = u8(clamp(dim_factor * f32(pixel.color.B), 0, MAX_COLOR_VALUE));
 
             all_pixels[pixel_offset] = pixel;
-
+            
             pixel_offset += width;
             v += texel_height;
         }

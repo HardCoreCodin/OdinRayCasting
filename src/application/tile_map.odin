@@ -8,21 +8,21 @@ MAX_TILE_MAP_VERTICES :: (MAX_TILE_MAP_WIDTH + 1) * (MAX_TILE_MAP_HEIGHT + 1);
 MAX_TILE_MAP_EDGES :: MAX_TILE_MAP_WIDTH * (MAX_TILE_MAP_HEIGHT + 1) + MAX_TILE_MAP_HEIGHT * (MAX_TILE_MAP_WIDTH + 1);
 
 Tile :: struct {
+	top_edge, 
+	bottom_edge, 
+	left_edge, 
+	right_edge: ^TileEdge,	
+
 	bounds: Bounds2Di,
 	bounds_in_minimap_space: Bounds2Df,
-	texture_id: u8,
-
-	is_full,
 	
+	is_full,
 	has_left_edge,
 	has_right_edge,
 	has_top_edge,
 	has_bottom_edge: bool,
-
-	top_edge, 
-	bottom_edge, 
-	left_edge, 
-	right_edge: ^TileEdge
+	
+	texture_id: u8
 }
 TileRow :: []Tile;
 
