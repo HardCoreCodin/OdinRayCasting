@@ -8,12 +8,6 @@ MAX_TILE_MAP_VERTICES :: (MAX_TILE_MAP_WIDTH + 1) * (MAX_TILE_MAP_HEIGHT + 1);
 MAX_TILE_MAP_EDGES :: MAX_TILE_MAP_WIDTH * (MAX_TILE_MAP_HEIGHT + 1) + MAX_TILE_MAP_HEIGHT * (MAX_TILE_MAP_WIDTH + 1);
 
 Tile :: struct {
-	minimap_space : struct {
-		bounds: Bounds2Df,
-		x_range, 
-		y_range: RangeI 
-	},
-
 	top_edge, 
 	bottom_edge, 
 	left_edge, 
@@ -39,9 +33,6 @@ TileEdge :: struct {
 		is_left,
 		is_right: bool	
 	},
-	minimap: struct {
-		from, to: ^vec2	
-	},
 	from, to: ^vec2i,
 	length: i32,
 
@@ -63,14 +54,12 @@ TileMap :: struct {
 	vertex_count: i32,
 	vertices: []vec2i,
 	vertices_in_local_space: []vec2,
-	vertices_in_minimap_space: []vec2,
 
 	all_rows: [MAX_TILE_MAP_HEIGHT]TileRow,
 	all_tiles: [MAX_TILE_MAP_SIZE]Tile,
 	all_edges: [MAX_TILE_MAP_EDGES]TileEdge,
 	all_vertices: [MAX_TILE_MAP_VERTICES]vec2i,
-	all_vertices_in_local_space: [MAX_TILE_MAP_VERTICES]vec2,
-	all_vertices_in_minimap_space: [MAX_TILE_MAP_VERTICES]vec2
+	all_vertices_in_local_space: [MAX_TILE_MAP_VERTICES]vec2
 }
 
 initTile :: inline proc(using t: ^Tile) {
@@ -92,18 +81,6 @@ initTile :: inline proc(using t: ^Tile) {
 	bounds.min.y = 0;
 	bounds.max.x = 0;
 	bounds.max.y = 0;
-
-	minimap_space.bounds.min.x = 0;
-	minimap_space.bounds.min.y = 0;
-	minimap_space.bounds.max.x = 0;
-	minimap_space.bounds.max.y = 0;
-
-	minimap_space.x_range.min = 0;
-	minimap_space.x_range.max = 0;
-	minimap_space.y_range.max = 0;
-	minimap_space.y_range.max = 0;
-	minimap_space.x_range.range = 0;
-	minimap_space.y_range.range = 0;
 }
 
 initTileEdge :: inline proc(using te: ^TileEdge) {
@@ -115,9 +92,6 @@ initTileEdge :: inline proc(using te: ^TileEdge) {
 	local.is_right = false;
 
 	length = 0;
-
-	minimap.from = nil;
-	minimap.to = nil;
 
 	from = nil;
 	to = nil;
@@ -139,7 +113,6 @@ initTileMap :: proc(using tm: ^TileMap, Width: i32 = MAX_TILE_MAP_WIDTH, Height:
 	edges = all_edges[:];
 	vertices = all_vertices[:];
 	vertices_in_local_space = all_vertices_in_local_space[:];
-	vertices_in_minimap_space = all_vertices_in_minimap_space[:];
 
 	for tile in &all_tiles do initTile(&tile);
 	
@@ -251,7 +224,6 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 		        		from = nil;
 		        		local.from = nil;
-		        		minimap.from = nil;
 		        		if left.exists && above.exists {
 		        			top_left := &above.row[x-1];
 		        			if top_left.is_full && 
@@ -259,14 +231,12 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		        			   top_left.has_bottom_edge {
 		        				from = top_left.bottom_edge.to;
 		        				local.from = top_left.bottom_edge.local.to;
-		        				minimap.from = top_left.bottom_edge.minimap.to;
 		        			}
 		        		}
 
 		        		if from == nil {
 		        			from = &all_vertices[vertex_id];
 		        			local.from = &all_vertices_in_local_space[vertex_id];
-		        			minimap.from = &all_vertices_in_minimap_space[vertex_id];
 		        			vertex_id += 1;
 
 		        			from^ = position;
@@ -274,7 +244,6 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 		        		to = &all_vertices[vertex_id];
 		        		local.to = &all_vertices_in_local_space[vertex_id];
-		        		minimap.to = &all_vertices_in_minimap_space[vertex_id];
 		        		vertex_id += 1;
 
 		        		to^ = position;
@@ -299,7 +268,6 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 						from = nil;
 		        		local.from = nil;
-		        		minimap.from = nil;
 		        		if right.exists && above.exists {
 		        			top_right := &above.row[x+1];
 		        			if top_right.is_full &&
@@ -307,14 +275,12 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		        			   top_right.has_bottom_edge {
 		        				from = top_right.bottom_edge.from;
 		        				local.from = top_right.bottom_edge.local.from;
-		        				minimap.from = top_right.bottom_edge.minimap.from;
 		        			}
 		        		}
 
 		        		if from == nil {
 		        			from = &all_vertices[vertex_id];
 		        			local.from = &all_vertices_in_local_space[vertex_id];
-		        			minimap.from = &all_vertices_in_minimap_space[vertex_id];
 		        			vertex_id += 1;
 
 		        			from^ = position;
@@ -323,7 +289,6 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 						to = &all_vertices[vertex_id];
 		        		local.to = &all_vertices_in_local_space[vertex_id];
-		        		minimap.to = &all_vertices_in_minimap_space[vertex_id];
 		        		vertex_id += 1;
 
 		        		to^ = position;
@@ -349,7 +314,6 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 						from = nil;
 		        		local.from = nil;
-		        		minimap.from = nil;
 		        		if left.exists && above.exists {
 		        			top_left := &above.row[x-1];
 		        			if top_left.is_full && 
@@ -357,13 +321,11 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		        			   top_left.has_bottom_edge {
 		        				from = top_left.bottom_edge.to;
 		        				local.from = top_left.bottom_edge.local.to;
-		        				minimap.from = top_left.bottom_edge.minimap.to;
 		        			}
 		        		}
 
 						to = nil;
 		        		local.to = nil;
-		        		minimap.to = nil;
 		        		if right.exists && above.exists {
 		        			top_right := &above.row[x+1];
 		        			if top_right.is_full &&
@@ -371,14 +333,12 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 		        			   top_right.has_bottom_edge {
 		        				to = top_right.bottom_edge.from;
 		        				local.to = top_right.bottom_edge.local.from;
-		        				minimap.to = top_right.bottom_edge.minimap.from;
 		        			}
 		        		}
 
 		        		if from == nil {
 		        			from = &all_vertices[vertex_id];
 		        			local.from = &all_vertices_in_local_space[vertex_id];
-		        			minimap.from = &all_vertices_in_minimap_space[vertex_id];
 		        			vertex_id += 1;
 
 		        			from^ = position;
@@ -387,7 +347,6 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 						if to == nil {
 		        			to = &all_vertices[vertex_id];
 		        			local.to = &all_vertices_in_local_space[vertex_id];
-		        			minimap.to = &all_vertices_in_minimap_space[vertex_id];
 		        			vertex_id += 1;
 
 		        			to^ = position;
@@ -413,7 +372,6 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 	        			from = &all_vertices[vertex_id];
 	        			local.from = &all_vertices_in_local_space[vertex_id];
-	        			minimap.from = &all_vertices_in_minimap_space[vertex_id];
 	        			vertex_id += 1;
 
 	        			from^ = position;
@@ -421,7 +379,6 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 	        			to = &all_vertices[vertex_id];
 	        			local.to = &all_vertices_in_local_space[vertex_id];
-	        			minimap.to = &all_vertices_in_minimap_space[vertex_id];
 	        			vertex_id += 1;
 
 	        			to^ = position;
@@ -455,5 +412,4 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 	edges = all_edges[:edge_id];
 	vertices = all_vertices[:vertex_id];
 	vertices_in_local_space = all_vertices_in_local_space[:vertex_id];
-	vertices_in_minimap_space = all_vertices_in_minimap_space[:vertex_id];
 }

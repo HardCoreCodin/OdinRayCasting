@@ -86,20 +86,20 @@ printBitmap :: proc(using bm: ^Bitmap) {
 	fmt.printf(TEXT_COLOR__RESET);
 }
 
-drawBitmap :: proc(from, to: ^Bitmap, pos: vec2i) {
-	if pos.x > to.width ||
-	    pos.y > to.height ||
-	    pos.x + from.width < 0 ||
-	    pos.y + from.height < 0 do
+drawBitmap :: proc(from, to: ^Bitmap, to_x: i32 = 0, to_y: i32 = 0) {
+	if to_x > to.width ||
+	    to_y > to.height ||
+	    to_x + from.width < 0 ||
+	    to_y + from.height < 0 do
 	    return;
 
 	to_start: vec2i = {
-		max(pos.x, 0),
-		max(pos.y, 0)
+		max(to_x, 0),
+		max(to_y, 0)
 	}; 
 	to_end: vec2i = {
-		min(pos.x+from.width, to.width),
-		min(pos.y+from.height, to.height)
+		min(to_x+from.width, to.width),
+		min(to_y+from.height, to.height)
 	};
 
 	from_alpha, to_alpha: f32;
@@ -107,7 +107,7 @@ drawBitmap :: proc(from, to: ^Bitmap, pos: vec2i) {
 	for y in to_start.y..<to_end.y {
 		for x in to_start.x..<to_end.x {
 			to_pixel := &to.pixels[y][x];
-			from_pixel = &from.pixels[y - pos.y][x - pos.x];
+			from_pixel = &from.pixels[y - to_y][x - to_x];
 
 			if from_pixel.opacity != 0 {
 				if from_pixel.opacity < 255 {

@@ -37,14 +37,15 @@ initMinimapCanvasBitmap :: proc(using mmcbm: ^MinimapCanvasBitmap, transparent: 
 
 MiniMap :: struct {
 	using canvas: MinimapCanvasBitmap,
-	debug_canvas: MinimapCanvasBitmap,
+	line_of_sight_canvas: MinimapCanvasBitmap,
 	walls_bitmap,
 	floor_bitmap,
 	ceiling_bitmap: MinimapTilesBitmap,
 
-	bounds, world_bounds: Bounds2Di,
-	pos: ^vec2i,
+	screen_bounds: Bounds2Di,
+	screen_position: ^vec2i,
 	origin: ^vec2,
+	top_left: vec2,
 
 	tile_map: ^TileMap,
 	center, pan, offset: vec2,
@@ -66,10 +67,12 @@ MiniMap :: struct {
 	scale_factor: f32
 }
 
+moveMiniMap :: inline proc(using mm: ^MiniMap, movement: vec2) do top_left += movement;
+
 initMiniMap :: proc(using mm: ^MiniMap, tm: ^TileMap, origin_position: ^vec2) {
 	tile_map = tm;
-	pos = &world_bounds.min;
 	origin = origin_position;
+	screen_position = &screen_bounds.min;
 
 	is_visible = true;
 	
@@ -88,7 +91,7 @@ initMiniMap :: proc(using mm: ^MiniMap, tm: ^TileMap, origin_position: ^vec2) {
 	initMinimapTilesBitmap(&ceiling_bitmap);
 
 	initMinimapCanvasBitmap(&canvas);
-	initMinimapCanvasBitmap(&debug_canvas, true);
+	initMinimapCanvasBitmap(&line_of_sight_canvas, true);
 
 	resizeMiniMap(mm, MINIMAP__MID_SIZE);
 }
@@ -112,10 +115,8 @@ resizeMiniMap :: inline proc(using mm: ^MiniMap, new_size: i32) {
 	size = clamp(new_size, MINIMAP__MIN_SIZE, MINIMAP__MAX_SIZE);
 	initBitmap(&bitmap, size, size, bits^[:]);
 	resetMiniMapSize(mm);
-	bounds.max.x = bounds.min.x + width;
-	bounds.max.y = bounds.min.y + height;
-	world_bounds.max.x = world_bounds.min.x + width;
-	world_bounds.max.y = world_bounds.min.y + height;
+	screen_bounds.max.x = screen_bounds.min.x + width;
+	screen_bounds.max.y = screen_bounds.min.y + height;
 }
 
 resetMiniMapSize :: proc(using mm: ^MiniMap) {
@@ -123,11 +124,9 @@ resetMiniMapSize :: proc(using mm: ^MiniMap) {
 	scale_factor = resize.factor * zoom.factor;
 	center.x = f32(width) / 2;
 	center.y = f32(height) / 2;
-	offset = center + pan;	
+	offset = center + pan;
+	top_left = offset - origin^ * scale_factor;
 
-	scaleMiniMap(mm);
-
-	// print(scale_factor);
 	pixel_size := scale_factor / TEXTURE_WIDTH;
 	new_width := i32(f32(wall_tiles_texture.width) * pixel_size); 
 	new_height := i32(f32(wall_tiles_texture.height) * pixel_size);
@@ -145,71 +144,27 @@ resetMiniMapSize :: proc(using mm: ^MiniMap) {
 	drawBitmapToScale(&ceiling_tiles_texture, &ceiling_bitmap.bitmap);
 }
 
-scaleMiniMap :: inline proc(using mm: ^MiniMap) {
-	for vertex, i in &tile_map.vertices_in_local_space do tile_map.vertices_in_minimap_space[i] = (vertex * scale_factor) + offset;
-	for row in &tile_map.tiles {
-		for tile in &row {
-			using tile.minimap_space;
-			bounds.min.x = f32(tile.bounds.min.x);
-			bounds.min.y = f32(tile.bounds.min.y);
-			bounds.max.x = f32(tile.bounds.max.x);
-			bounds.max.y = f32(tile.bounds.max.y);
-			bounds.min -= origin^;
-			bounds.max -= origin^;
-			bounds.min *= scale_factor;
-			bounds.max *= scale_factor;
-			bounds.min += offset;
-			bounds.max += offset;	
-			x_range.min = i32(bounds.min.x);
-			x_range.max = i32(bounds.max.x);
-			y_range.min = i32(bounds.min.y);
-			y_range.max = i32(bounds.max.y);
-			x_range.range = x_range.max - x_range.min;
-			y_range.range = y_range.max - y_range.min;
-		}
-	}
-}
-
-moveMiniMap :: inline proc(using mm: ^MiniMap, movement: vec2) {
-	for vertex, i in &tile_map.vertices_in_local_space do tile_map.vertices_in_minimap_space[i] += movement;
-	for row in &tile_map.tiles {
-		for tile in &row {
-			using tile.minimap_space;
-			bounds.min += movement;
-			bounds.max += movement;
-			x_range.min = i32(bounds.min.x);
-			x_range.max = i32(bounds.max.x);
-			y_range.min = i32(bounds.min.y);
-			y_range.max = i32(bounds.max.y);
-			x_range.range = x_range.max - x_range.min;
-			y_range.range = y_range.max - y_range.min;
-		}	
-	}
-}
-
 panMiniMap :: inline proc(using mm: ^MiniMap) {
 	panned = true;
-	movement: vec2 = {f32(mouse_pos_diff.x), f32(mouse_pos_diff.y)};
+	movement: vec2 = {
+		f32(mouse_pos_diff.x), 
+		f32(mouse_pos_diff.y)
+	};
 	pan += movement;
 	offset += movement;
+	
 	moveMiniMap(mm, movement);
+
     mouse_pos_diff.x = 0;
     mouse_pos_diff.y = 0;
     mouse_moved = false;
 }
 
 drawMiniMap :: inline proc(using mm: ^MiniMap) {
-	fillBounds2Di(&bitmap, &bounds, BLACK, 0);
+	clearBitmap(&bitmap, true);
 
-	texture: ^Bitmap;
-	pixel_offset: i32;
-
-	p: vec2i = {
-		i32(tile_map.all_tiles[0].minimap_space.bounds.min.x),
-		i32(tile_map.all_tiles[0].minimap_space.bounds.min.y)
-	};
-	drawBitmap(&floor_bitmap, &canvas, p);
-	drawBitmap(&walls_bitmap, &canvas, p);
+	drawBitmap(&floor_bitmap, &canvas, i32(top_left.x), i32(top_left.y));
+	drawBitmap(&walls_bitmap, &canvas, i32(top_left.x), i32(top_left.y));
 	// for pixel in &canvas.all_pixels do pixel.opacity = 254;
 
 	// for row, y in &tile_map.tiles do
@@ -244,17 +199,16 @@ drawMiniMap :: inline proc(using mm: ^MiniMap) {
 	
 	padding: vec2 = {1, 1};
 
-	clearBitmap(&debug_canvas.bitmap, true);
-	for ray in &rays do drawLine(&debug_canvas.bitmap, offset, offset + (ray.hit.position - origin^)*scale_factor, ray_color, 64);
-	p = 0;
-	drawBitmap(&debug_canvas.bitmap, &canvas, p);
+	clearBitmap(&line_of_sight_canvas.bitmap, true);
+	for ray in &rays do drawLine(&line_of_sight_canvas.bitmap, offset, offset + (ray.hit.position - origin^)*scale_factor, ray_color, 64);
+	drawBitmap(&line_of_sight_canvas.bitmap, &canvas);
 		
-	if is_debug_visible do
-		for edge in &tile_map.edges {
-			using edge.minimap;
-			drawLine(&bitmap, from^, to^, edge.is_facing_forward ? front_edge_color : back_edge_color);
-			fillRect(&bitmap, from^ - padding, from^ + padding, vertex_color);
-			fillRect(&bitmap, to^   - padding, to^   + padding, vertex_color);
-		}
+	// if is_debug_visible do
+	// 	for edge in &tile_map.edges {
+	// 		using edge.minimap;
+	// 		drawLine(&bitmap, from^, to^, edge.is_facing_forward ? front_edge_color : back_edge_color);
+	// 		fillRect(&bitmap, from^ - padding, from^ + padding, vertex_color);
+	// 		fillRect(&bitmap, to^   - padding, to^   + padding, vertex_color);
+	// 	}
 	fillCircle(&bitmap, offset, max(scale_factor * body_radius, 1), center_color);
 }

@@ -87,7 +87,7 @@ resize :: proc(new_width, new_height: i32) {
 	render();
 }
 
-mouseOnMiniMap :: inline proc() -> bool do return mini_map.is_visible && inBounds(mini_map.world_bounds, mouse_pos);
+mouseOnMiniMap :: inline proc() -> bool do return mini_map.is_visible && inBounds(mini_map.screen_bounds, mouse_pos);
 
 update :: proc() {
 	using frame_buffer;
@@ -110,8 +110,8 @@ update :: proc() {
 		if mouse_is_captured do onMouseMoved(&camera_controller);
 		else if !mouse_is_captured && middle_mouse_button.is_pressed && mouseOnMiniMap() {
 			if ctrl_is_pressed {
-				mini_map.world_bounds.min += mouse_pos_diff;
-				mini_map.world_bounds.max += mouse_pos_diff;
+				mini_map.screen_bounds.min += mouse_pos_diff;
+				mini_map.screen_bounds.max += mouse_pos_diff;
 				mouse_pos_diff.x = 0;
 			    mouse_pos_diff.y = 0;
 			    mouse_moved = false;
@@ -146,7 +146,7 @@ update :: proc() {
 			right_mouse_button.is_pressed) &&
 			mouseOnMiniMap() {
 			tile_coords := mouse_pos;
-			tile_coords -= mini_map.pos^;
+			tile_coords -= mini_map.screen_position^;
 			tile_pos: vec2 = {f32(tile_coords.x), f32(tile_coords.y)};
 			tile_pos -= mini_map.offset;
 			tile_pos /= mini_map.scale_factor;
@@ -201,24 +201,28 @@ render :: proc() {
 	// fillBounds2Di(&bitmap, &bounds, BLACK, 0);
 	drawWalls(&camera);
 	if mini_map.is_visible {
-		drawBitmap(&mini_map.canvas.bitmap, &bitmap, mini_map.pos^);
-		drawRect(&bitmap, &mini_map.world_bounds, WHITE);
+		drawBitmap(&mini_map.canvas.bitmap, &bitmap, mini_map.screen_position.x, mini_map.screen_position.y);
+		drawRect(&bitmap, &mini_map.screen_bounds, WHITE);
 	}
 
 	ticks_after = getTicks();
 	accumulateTimer(&render_timer);
 
 	if (ticks_after - ticks_of_last_report) >= ticks_per_second {
-		print(
-			"Ray-Casting",
-			u64(
-				microseconds_per_tick * (
+		print("FPS:", 1 / (seconds_per_tick * (
 					f64(accumulated_ticks) / 
 					f64(accumulated_frame_count)
-				)
-			),
-			"μs/f"
-		);
+				)));
+		// print(
+		// 	"Ray-Casting",
+		// 	u64(
+		// 		microseconds_per_tick * (
+		// 			f64(accumulated_ticks) / 
+		// 			f64(accumulated_frame_count)
+		// 		)
+		// 	),
+		// 	"μs/f"
+		// );
 
 		accumulated_ticks = 0;
 		accumulated_frame_count = 0;
