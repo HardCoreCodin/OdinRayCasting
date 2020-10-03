@@ -25,6 +25,7 @@ remap :: inline proc(value, src_start, src_end, trg_start, trg_end: f32) -> f32 
 	return (min(max(value, src_start), src_end) / (src_end - src_start)) * (trg_end - trg_start) + trg_start;
 
 Range :: struct {min, max, range: f32}
+RangeI :: struct {min, max, range: i32}
 AmountAndFactor :: struct {
 	amount, factor: f32,
 	src, trg: Range,

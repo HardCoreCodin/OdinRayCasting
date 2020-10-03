@@ -1,20 +1,25 @@
 package application
 
 MAX_TILE_MAP_VIEW_DISTANCE :: 50;
-MAX_TILE_MAP_WIDTH :: 40;
-MAX_TILE_MAP_HEIGHT :: 30;
+MAX_TILE_MAP_WIDTH :: 32;
+MAX_TILE_MAP_HEIGHT :: 32;
 MAX_TILE_MAP_SIZE :: MAX_TILE_MAP_WIDTH * MAX_TILE_MAP_HEIGHT;
 MAX_TILE_MAP_VERTICES :: (MAX_TILE_MAP_WIDTH + 1) * (MAX_TILE_MAP_HEIGHT + 1);
 MAX_TILE_MAP_EDGES :: MAX_TILE_MAP_WIDTH * (MAX_TILE_MAP_HEIGHT + 1) + MAX_TILE_MAP_HEIGHT * (MAX_TILE_MAP_WIDTH + 1);
 
 Tile :: struct {
+	minimap_space : struct {
+		bounds: Bounds2Df,
+		x_range, 
+		y_range: RangeI 
+	},
+
 	top_edge, 
 	bottom_edge, 
 	left_edge, 
 	right_edge: ^TileEdge,	
 
 	bounds: Bounds2Di,
-	bounds_in_minimap_space: Bounds2Df,
 	
 	is_full,
 	has_left_edge,
@@ -87,6 +92,18 @@ initTile :: inline proc(using t: ^Tile) {
 	bounds.min.y = 0;
 	bounds.max.x = 0;
 	bounds.max.y = 0;
+
+	minimap_space.bounds.min.x = 0;
+	minimap_space.bounds.min.y = 0;
+	minimap_space.bounds.max.x = 0;
+	minimap_space.bounds.max.y = 0;
+
+	minimap_space.x_range.min = 0;
+	minimap_space.x_range.max = 0;
+	minimap_space.y_range.max = 0;
+	minimap_space.y_range.max = 0;
+	minimap_space.x_range.range = 0;
+	minimap_space.y_range.range = 0;
 }
 
 initTileEdge :: inline proc(using te: ^TileEdge) {

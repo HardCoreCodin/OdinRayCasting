@@ -57,6 +57,29 @@ distance_factor: f32 = DIM_FACTOR_RANGE / MAX_TILE_MAP_VIEW_DISTANCE;
 half_width,
 half_height: f32;
 
+TILE_MAP_TEXTURE_PIXEL_COUND :: MAX_TILE_MAP_SIZE*TEXTURE_SIZE;
+
+TileMapTexture :: struct {
+    using bitmap: Bitmap,
+    bits: ^[TILE_MAP_TEXTURE_PIXEL_COUND]u32
+};
+
+floor_texture   := &textures[7];
+ceiling_texture := &textures[3];
+
+floor_tiles_texture,
+wall_tiles_texture,
+ceiling_tiles_texture: TileMapTexture;
+
+initTileMapTexture :: proc(using tmt: ^TileMapTexture) {
+    bits = new([TILE_MAP_TEXTURE_PIXEL_COUND]u32);
+    initBitmap(&bitmap, 
+        MAX_TILE_MAP_WIDTH * TEXTURE_WIDTH, 
+        MAX_TILE_MAP_HEIGHT * TEXTURE_HEIGHT, 
+        bits^[:]
+    );
+}
+
 onResize :: proc() {
     using frame_buffer;
 
@@ -86,7 +109,15 @@ onResize :: proc() {
 initRayCast :: proc() {
     bits := new([MAX_BITMAP_WIDTH*(MAX_BITMAP_HEIGHT*2)]VerticalHit);
     all_vertical_hits = bits^[:];
+
     onResize();
+
+    initTileMapTexture(&wall_tiles_texture);
+    initTileMapTexture(&floor_tiles_texture);
+    initTileMapTexture(&ceiling_tiles_texture);
+
+    drawFloorTilesTexture(&tile_map);
+    drawCeilingTilesTexture(&tile_map);   
 }
 
 onFocalLengthChanged :: proc() {
@@ -221,9 +252,6 @@ MIN_DIM_FACTOR :: 0.1;
 MAX_DIM_FACTOR :: 2;
 DIM_FACTOR_RANGE :: MAX_DIM_FACTOR - MIN_DIM_FACTOR;
 
-floor_texture:= &textures[7];
-ceiling_texture:= &textures[3];
-
 drawWalls :: proc(using cam: ^Camera2D) {
     using xform;
     using frame_buffer;
@@ -299,9 +327,34 @@ drawWalls :: proc(using cam: ^Camera2D) {
             v += texel_height;
         }
     }
-}  
+}
 
 MAX_COLOR_VALUE :: 0xFF;
+
+drawWallTilesTexture :: proc(using tm: ^TileMap) {
+    clearBitmap(&wall_tiles_texture.bitmap, true);
+    
+    for row in &tiles do
+        for tile in &row do if tile.is_full do
+            drawBitmap(&textures[tile.texture_id], &wall_tiles_texture.bitmap, tile.bounds.min * TEXTURE_WIDTH);
+}
+
+drawFloorTilesTexture :: proc(using tm: ^TileMap) {
+    clearBitmap(&floor_tiles_texture.bitmap);
+
+    for row in &tiles do
+        for tile in &row do
+            drawBitmap(floor_texture, &floor_tiles_texture.bitmap, tile.bounds.min * TEXTURE_WIDTH);
+}
+
+drawCeilingTilesTexture :: proc(using tm: ^TileMap) {
+    clearBitmap(&ceiling_tiles_texture.bitmap);
+
+    for row in &tiles do
+        for tile in &row do
+            drawBitmap(ceiling_texture, &ceiling_tiles_texture.bitmap, tile.bounds.min * TEXTURE_WIDTH);
+}
+
 
 horizontal_hit, vertical_hit: RayHit;
 

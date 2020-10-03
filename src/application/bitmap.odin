@@ -21,7 +21,10 @@ Bitmap :: struct {
 
 initBitmap :: proc(using bitmap: ^Bitmap, new_width, new_height: i32, bits: []u32) {
 	all_pixels = transmute(PixelRow)(bits);
+	resizeBitmap(bitmap, new_width, new_height);
+}
 
+resizeBitmap :: proc(using bitmap: ^Bitmap, new_width, new_height: i32) {
 	width = new_width;
 	height = new_height;
 	size = width * height;
@@ -37,6 +40,12 @@ initBitmap :: proc(using bitmap: ^Bitmap, new_width, new_height: i32, bits: []u3
 
 	pixels = all_rows[:height];
 }
+
+BLACK_PIXEL: Pixel = {color=BLACK, opacity=255};
+TRANSPARENT_PIXEL: Pixel = {color=BLACK, opacity=0};
+clearBitmap :: inline proc(using bm: ^Bitmap, transparent: bool = false) do 
+	for pixel in &all_pixels do 
+		pixel = transparent ? TRANSPARENT_PIXEL : BLACK_PIXEL;
 
 readBitmapFromFile :: proc(file: []u8, using bitmap: ^Bitmap, bits: []u32) {
 	header:= (^BMP_FileHeader)(&file[0])^;
@@ -118,6 +127,14 @@ drawBitmap :: proc(from, to: ^Bitmap, pos: vec2i) {
 			}
 		} 
 	}
+}
+
+drawBitmapToScale :: proc(from, to: ^Bitmap) {
+	pixel_size := f32(from.width) / f32(to.width);
+
+	for y in 0..<to.height do
+		for x in 0..<to.width do
+			to.pixels[y][x] = from.pixels[i32(f32(y) * pixel_size)][i32(f32(x) * pixel_size)];
 }
 
 sampleBitmap :: inline proc(using bm: ^Bitmap, u, v: f32, pixel: ^Pixel) do
