@@ -110,7 +110,7 @@ WndProc:: proc "std" (hWnd: HWND, message: UINT, wParam: WPARAM, lParam: LPARAM)
 		case WM_PAINT:
 		    SetDIBitsToDevice(win_dc, 0, 0, u32(width), u32(height),
 		                              0, 0, 0,          u32(height),
-		                      bits, &info, DIB_RGB_COLORS);
+		                      &frame_buffer_bits[0], &info, DIB_RGB_COLORS);
 		    ValidateRgn(window, nil);
 
         case WM_DESTROY:
@@ -158,8 +158,8 @@ run_application :: proc() {
     window = CreateWindowExA(0, class_name, "Application", WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
-        INITIAL_WIDTH, 
-        INITIAL_HEIGHT, 
+        FRAME_BUFFER__INITIAL_WIDTH, 
+        FRAME_BUFFER__INITIAL_HEIGHT, 
         nil, nil, HInstance, nil);
     when ODIN_DEBUG do assert(window != nil, "Failed to create window!");
 

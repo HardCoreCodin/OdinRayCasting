@@ -48,17 +48,16 @@ updateLSI :: proc() {
 
 renderLSI :: proc() {
 	using camera.xform;
-	using frame_buffer;
 	
-	fillRect(&bitmap, 0, 0, width, height, BLACK);
+	fillRect(&frame_buffer, 0, 0, frame_buffer.width, frame_buffer.height, BLACK);
 	
-	drawLine(&bitmap, A, B, WHITE);
-	drawLine(&bitmap, C, D, WHITE);
+	drawLine(&frame_buffer, A, B, WHITE);
+	drawLine(&frame_buffer, C, D, WHITE);
 
-	fillCircle(&bitmap, A, R, GREY);
-	fillCircle(&bitmap, B, R, YELLOW);
-	fillCircle(&bitmap, C, R, BLUE);
-	fillCircle(&bitmap, D, R, GREEN);
+	fillCircle(&frame_buffer, A, R, GREY);
+	fillCircle(&frame_buffer, B, R, YELLOW);
+	fillCircle(&frame_buffer, C, R, BLUE);
+	fillCircle(&frame_buffer, D, R, GREEN);
 	
-	if intersected do fillCircle(&bitmap, P, R, RED);	
+	if intersected do fillCircle(&frame_buffer, P, R, RED);	
 }

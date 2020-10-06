@@ -24,14 +24,14 @@ Ray :: struct {
 
     hit: RayHit
 }
-all_rays: [MAX_BITMAP_WIDTH]Ray;
+all_rays: [FRAME_BUFFER__MAX_WIDTH]Ray;
 rays: []Ray;
 
-
 VerticalHitInfo :: struct {
-    distance, dim_factor: f32
+    distance, dim_factor: f32,
+    mip_level: u8
 }
-all_vertical_hit_infos: [MAX_BITMAP_HEIGHT/2]VerticalHitInfo;
+all_vertical_hit_infos: [FRAME_BUFFER__MAX_HEIGHT/2]VerticalHitInfo;
 vertical_hit_infos: []VerticalHitInfo;
 
 VerticalHit :: struct {
@@ -50,34 +50,18 @@ VerticalHitRow :: []VerticalHit;
 VerticalHitGrid :: []VerticalHitRow;
 
 all_vertical_hits: VerticalHitRow;
-all_vertical_hit_rows: [MAX_BITMAP_HEIGHT/2]VerticalHitRow;
+all_vertical_hit_rows: [FRAME_BUFFER__MAX_HEIGHT/2]VerticalHitRow;
 vertical_hits: VerticalHitGrid;
 
 distance_factor: f32 = DIM_FACTOR_RANGE / MAX_TILE_MAP_VIEW_DISTANCE;
 half_width,
 half_height: f32;
 
-TILE_MAP_TEXTURE_PIXEL_COUND :: MAX_TILE_MAP_SIZE*TEXTURE_SIZE;
+initRayCast :: proc() {
+    bits := new([FRAME_BUFFER__MAX_WIDTH * (FRAME_BUFFER__MAX_HEIGHT * 2)]VerticalHit);
+    all_vertical_hits = bits^[:];
 
-TileMapTexture :: struct {
-    using bitmap: Bitmap,
-    bits: ^[TILE_MAP_TEXTURE_PIXEL_COUND]u32
-};
-
-floor_texture   := &textures[7];
-ceiling_texture := &textures[3];
-
-floor_tiles_texture,
-wall_tiles_texture,
-ceiling_tiles_texture: TileMapTexture;
-
-initTileMapTexture :: proc(using tmt: ^TileMapTexture) {
-    bits = new([TILE_MAP_TEXTURE_PIXEL_COUND]u32);
-    initBitmap(&bitmap, 
-        MAX_TILE_MAP_WIDTH * TEXTURE_WIDTH, 
-        MAX_TILE_MAP_HEIGHT * TEXTURE_HEIGHT, 
-        bits^[:]
-    );
+    onResize();
 }
 
 onResize :: proc() {
@@ -106,19 +90,6 @@ onResize :: proc() {
     castRays(&tile_map);
 }
 
-initRayCast :: proc() {
-    bits := new([MAX_BITMAP_WIDTH*(MAX_BITMAP_HEIGHT*2)]VerticalHit);
-    all_vertical_hits = bits^[:];
-
-    onResize();
-
-    initTileMapTexture(&wall_tiles_texture);
-    initTileMapTexture(&floor_tiles_texture);
-    initTileMapTexture(&ceiling_tiles_texture);
-
-    drawFloorAndCeilingTilesTexture(&tile_map);
-}
-
 onFocalLengthChanged :: proc() {
     generateRays();
 }
@@ -139,6 +110,7 @@ generateRays :: proc() {
         using vertical_hit_info;
         distance = 1 / (2 * f32(y));
         dim_factor = 1 - distance * half_height * distance_factor + MIN_DIM_FACTOR;
+        mip_level = u8(f32(MIP_COUNT/2) * (1 - f32(y) / f32(num_vertical_hit_infos))); 
     }
 
     vertical_hit: ^VerticalHit;
@@ -234,122 +206,6 @@ castRays :: inline proc(using tm: ^TileMap) {
             }
         } 
     }
-}
-
-CEILING_COLOR: Color = {
-    R = 44,
-    G = 44,
-    B = 44
-};
-FLOOR_COLOR: Color = {
-    R = 88,
-    G = 88,
-    B = 88
-};
-
-MIN_DIM_FACTOR :: 0.1;
-MAX_DIM_FACTOR :: 2;
-DIM_FACTOR_RANGE :: MAX_DIM_FACTOR - MIN_DIM_FACTOR;
-
-drawWalls :: proc(using cam: ^Camera2D) {
-    using xform;
-    using frame_buffer;
-
-    top, bottom, 
-    pixel_offset,
-    column_height: i32;
-
-    texel_height,
-    distance, dim_factor, u, v: f32;   
-    max_distance := half_width * focal_length;
-
-    vertical_hit: ^VerticalHit;
-    texture: ^Bitmap;
-    pixel: Pixel;
-
-    floor_pixel_offset := size - width;
-    ceiling_pixel_offset: i32;
-
-    for vertical_hit_row, y in &vertical_hits {
-        for vertical_hit, x in &vertical_hit_row {
-            if !vertical_hit.found do continue;
-
-            dim_factor = vertical_hit.info.dim_factor;
-
-            sampleBitmap(floor_texture, vertical_hit.u, vertical_hit.v, &pixel);
-            pixel.color.R = u8(clamp(dim_factor * f32(pixel.color.R), 0, MAX_COLOR_VALUE));
-            pixel.color.G = u8(clamp(dim_factor * f32(pixel.color.G), 0, MAX_COLOR_VALUE));
-            pixel.color.B = u8(clamp(dim_factor * f32(pixel.color.B), 0, MAX_COLOR_VALUE));
-            all_pixels[floor_pixel_offset + i32(x)] = pixel;
-
-            sampleBitmap(ceiling_texture, vertical_hit.u, vertical_hit.v, &pixel);
-            pixel.color.R = u8(clamp(dim_factor * f32(pixel.color.R), 0, MAX_COLOR_VALUE));
-            pixel.color.G = u8(clamp(dim_factor * f32(pixel.color.G), 0, MAX_COLOR_VALUE));
-            pixel.color.B = u8(clamp(dim_factor * f32(pixel.color.B), 0, MAX_COLOR_VALUE));
-            all_pixels[ceiling_pixel_offset + i32(x)] = pixel;
-        }
-
-        floor_pixel_offset   -= width;
-        ceiling_pixel_offset += width;
-    }
-
-    for ray, x in &rays {
-        using ray;
-
-        texture = &textures[hit.tile.texture_id];
-
-        distance = dot((hit.position - position), forward_direction^);
-        if distance < 0 do distance = -distance;
-        
-        dim_factor = 1 - distance * distance_factor + MIN_DIM_FACTOR;
-
-        column_height = i32(max_distance / distance);
-
-        top    = column_height < height ? (height - column_height) / 2 : 0;
-        bottom = column_height < height ? (height + column_height) / 2 : height;
-
-        texel_height = 1 / f32(column_height);
-        v = column_height > height ? f32((column_height - height) / 2) * texel_height : 0;
-        u = hit.tile_fraction;
-        
-        pixel_offset = top * width + i32(x);
-        for y in top..<bottom {            
-            sampleBitmap(texture, u, v, &pixel);
-
-            pixel.color.R = u8(clamp(dim_factor * f32(pixel.color.R), 0, MAX_COLOR_VALUE));
-            pixel.color.G = u8(clamp(dim_factor * f32(pixel.color.G), 0, MAX_COLOR_VALUE));
-            pixel.color.B = u8(clamp(dim_factor * f32(pixel.color.B), 0, MAX_COLOR_VALUE));
-
-            all_pixels[pixel_offset] = pixel;
-            
-            pixel_offset += width;
-            v += texel_height;
-        }
-    }
-}
-
-MAX_COLOR_VALUE :: 0xFF;
-
-drawWallTilesTexture :: proc(using tm: ^TileMap) {
-    clearBitmap(&wall_tiles_texture.bitmap, true);
-    
-    for row in &tiles do
-        for tile in &row do if tile.is_full do
-            drawBitmap(&textures[tile.texture_id], &wall_tiles_texture.bitmap, tile.bounds.min.x * TEXTURE_WIDTH, tile.bounds.min.y * TEXTURE_HEIGHT);
-}
-
-drawFloorAndCeilingTilesTexture :: proc(using tm: ^TileMap) {
-    clearBitmap(&floor_tiles_texture.bitmap);
-    clearBitmap(&ceiling_tiles_texture.bitmap);
-
-    pos: vec2i;
-
-    for row in &tiles do
-        for tile in &row {
-            pos = tile.bounds.min * TEXTURE_WIDTH;
-            drawBitmap(ceiling_texture, &ceiling_tiles_texture.bitmap, pos.x, pos.y);
-            drawBitmap(floor_texture, &floor_tiles_texture.bitmap, pos.x, pos.y);
-        }
 }
 
 horizontal_hit, vertical_hit: RayHit;

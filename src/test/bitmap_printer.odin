@@ -118,13 +118,16 @@ printBitmapAsCode :: proc(using bitmap: ^Bitmap) {
 }
 
 file := #load("bluestone.bmp");
-bits := new([application.MAX_BITMAP_SIZE]u32);
+bits: [application.FRAME_BUFFER__MAX_SIZE]u32;
 bitmap_from_file: Bitmap;
 
+texture: application.Texture;
+
 doit :: proc() {
-	application.readBitmapFromFile(file, &bitmap_from_file, bits^[:]);
-	
+	// application.readBitmapFromFile(&bitmap_from_file, file, bits[:]);
 	application.printBitmap(&bitmap_from_file);
+	application.initTexture(&texture, &bitmap_from_file);
+	fmt.println(texture);
 	// printBitmapAsCode(&bitmap_from_file);
 	// application.printBitmap(&brush_from_file);
 }

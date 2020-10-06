@@ -1,28 +1,13 @@
 package application
 
-INITIAL_WIDTH  :: 640;
-INITIAL_HEIGHT :: 480;
+FRAME_BUFFER__INITIAL_WIDTH  :: 640;
+FRAME_BUFFER__INITIAL_HEIGHT :: 480;
+FRAME_BUFFER__MAX_WIDTH  :: 3840;
+FRAME_BUFFER__MAX_HEIGHT :: 2160;
+FRAME_BUFFER__MAX_SIZE   :: FRAME_BUFFER__MAX_WIDTH * FRAME_BUFFER__MAX_HEIGHT;
 
 import "core:fmt"
 print :: fmt.println;
-
-TEXTURE_COUNT :: 8;
-TEXTURE_WIDTH :: 64;
-TEXTURE_HEIGHT :: 64;
-TEXTURE_SIZE :: TEXTURE_WIDTH * TEXTURE_HEIGHT;
-
-texture_files: [TEXTURE_COUNT][]u8= {
-	#load("../../assets/bluestone.bmp"),
-	#load("../../assets/colorstone.bmp"),
-	#load("../../assets/eagle.bmp"),
-	#load("../../assets/graystone.bmp"),
-	#load("../../assets/mossystone.bmp"),
-	#load("../../assets/purplestone.bmp"),
-	#load("../../assets/redbrick.bmp"),
-	#load("../../assets/wood.bmp")
-};
-texture_bitmaps_data: [TEXTURE_COUNT][TEXTURE_SIZE]u32;
-textures: [TEXTURE_COUNT]Bitmap;
 
 mini_map: MiniMap;
 tile_map: TileMap;
@@ -78,10 +63,12 @@ body_radius: f32 = 0.3;
 next_tile: ^Tile;
 tile_map_changed: bool;
 
-frame_buffer: FrameBuffer;
+frame_buffer_bits: [FRAME_BUFFER__MAX_SIZE]u32;
+frame_buffer: Bitmap;
 
 resize :: proc(new_width, new_height: i32) {
-	resizeFrameBuffer(new_width, new_height, &frame_buffer);
+	initBitmap(&frame_buffer, new_width, new_height, frame_buffer_bits[:]);
+	
 	onResize();
 	update();
 	render();
@@ -90,7 +77,6 @@ resize :: proc(new_width, new_height: i32) {
 mouseOnMiniMap :: inline proc() -> bool do return mini_map.is_visible && inBounds(mini_map.screen_bounds, mouse_pos);
 
 update :: proc() {
-	using frame_buffer;
 	using update_timer;
 	using camera.xform;
 	using camera_controller;
@@ -163,7 +149,7 @@ update :: proc() {
 	if tile_map_changed {
 		generateTileMapEdges(&tile_map);
 		drawWallTilesTexture(&tile_map);
-		drawBitmapToScale(&wall_tiles_texture, &mini_map.walls_bitmap.bitmap);
+		drawBitmapToScale(&map_textures[0].walls, &mini_map.tile_map_textures.walls);
 	}
 	if tile_map_changed || moved {
 		moveTileMap(&tile_map, position);
@@ -192,7 +178,6 @@ update :: proc() {
 render :: proc() {
 	using render_timer;
 	using camera.xform;
-	using frame_buffer;
 
 	ticks_before = getTicks();
 
@@ -201,8 +186,9 @@ render :: proc() {
 	// fillBounds2Di(&bitmap, &bounds, BLACK, 0);
 	drawWalls(&camera);
 	if mini_map.is_visible {
-		drawBitmap(&mini_map.canvas.bitmap, &bitmap, mini_map.screen_position.x, mini_map.screen_position.y);
-		drawRect(&bitmap, &mini_map.screen_bounds, WHITE);
+		// drawBitmap(&mini_map.floor, &frame_buffer, mini_map.screen_position.x, mini_map.screen_position.y);
+		drawBitmap(&mini_map.canvas, &frame_buffer, mini_map.screen_position.x, mini_map.screen_position.y);
+		drawRect(&frame_buffer, &mini_map.screen_bounds, WHITE);
 	}
 
 	ticks_after = getTicks();
@@ -234,25 +220,29 @@ initApplication :: proc(platformGetTicks: GetTicks, platformTicksPerSecond: u64)
 	using camera.xform;
 	position = 20;
 	toggle1 = true;
-	
 	initTimers(platformGetTicks, platformTicksPerSecond);
-	initFrameBuffer(&frame_buffer);
 
+	initBitmap(&frame_buffer, FRAME_BUFFER__MAX_WIDTH, FRAME_BUFFER__MAX_HEIGHT, frame_buffer_bits[:]);
+	
 	initCamera(&camera);
 	initCameraController(&camera_controller.controller);
 	camera_controller.camera = &camera;
 	
+	initTextures();
+
 	initTileMap(&tile_map);
-	
-	for texture, i in &textures do readBitmapFromFile(texture_files[i], &texture, texture_bitmaps_data[i][:]);
 	readTileMapFromASCIIgrid(&tile_map, &TILE_MAP_ASCII_GRID);
 	generateTileMapEdges(&tile_map);
 	moveTileMap(&tile_map, position);
+	
+    drawFloorAndCeilingTilesTexture(&tile_map);
 
 	initRayCast();
 	drawWallTilesTexture(&tile_map);
 	initMiniMap(&mini_map, &tile_map, &position);
 	drawMiniMap(&mini_map);
 	
+	// initMipMap(&mipmap, ceiling_texture);
+
 	UPDATE_INTERVAL = ticks_per_second / TARGET_FPS;
 }

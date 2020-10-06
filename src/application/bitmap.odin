@@ -2,10 +2,6 @@ package application
 
 import "core:fmt"
 
-MAX_BITMAP_WIDTH  :: 3840;
-MAX_BITMAP_HEIGHT :: 2160;
-MAX_BITMAP_SIZE   :: MAX_BITMAP_WIDTH * MAX_BITMAP_HEIGHT;
-
 Pixel :: struct {
 	using color: Color,
 	opacity: u8
@@ -14,11 +10,10 @@ PixelRow :: []Pixel;
 PixelGrid :: []PixelRow;
 Bitmap :: struct {
 	all_pixels: PixelRow,
-	all_rows: [MAX_BITMAP_HEIGHT]PixelRow,
+	all_rows: []PixelRow,
 	pixels: PixelGrid,
 	width, height, size: i32	
 }
-
 initBitmap :: proc(using bitmap: ^Bitmap, new_width, new_height: i32, bits: []u32) {
 	all_pixels = transmute(PixelRow)(bits);
 	resizeBitmap(bitmap, new_width, new_height);
@@ -32,6 +27,8 @@ resizeBitmap :: proc(using bitmap: ^Bitmap, new_width, new_height: i32) {
 	start: i32;
 	end := width;
 
+	all_rows = make_slice([]PixelRow, height);
+
 	for y in 0..<height {
 		all_rows[y] = all_pixels[start:end];
 		start += width;
@@ -43,16 +40,12 @@ resizeBitmap :: proc(using bitmap: ^Bitmap, new_width, new_height: i32) {
 
 BLACK_PIXEL: Pixel = {color=BLACK, opacity=255};
 TRANSPARENT_PIXEL: Pixel = {color=BLACK, opacity=0};
+
 clearBitmap :: inline proc(using bm: ^Bitmap, transparent: bool = false) do 
 	for pixel in &all_pixels do 
 		pixel = transparent ? TRANSPARENT_PIXEL : BLACK_PIXEL;
 
-readBitmapFromFile :: proc(file: []u8, using bitmap: ^Bitmap, bits: []u32) {
-	header:= (^BMP_FileHeader)(&file[0])^;
-	data := file[header.data_offset:];
-
-	initBitmap(bitmap, header.width, header.height, bits);
-
+_readBitmapPixelsFromFileData :: proc(using bitmap: ^Bitmap, data: []u8) {
 	for row, y in &pixels do 
 		for pixel, x in &row {
 			pixel.color = (^Color)(&data[((height-1 -i32(y))*width + i32(x))*3])^;
@@ -61,8 +54,26 @@ readBitmapFromFile :: proc(file: []u8, using bitmap: ^Bitmap, bits: []u32) {
 			 	pixel.color.B == 0xFF && 
 			 	pixel.color.G == 0
 			 ) ? 0 : 0xFF;
-		} 
+		}
 }
+
+_readBitmapFromFile :: proc(using bitmap: ^Bitmap, file: []u8, bits: []u32) {
+	header:= (^BMP_FileHeader)(&file[0])^;
+
+	initBitmap(bitmap, header.width, header.height, bits);
+
+	_readBitmapPixelsFromFileData(bitmap, file[header.data_offset:]);
+}
+
+_allocateAndReadBitmapFromFile :: proc(using bitmap: ^Bitmap, file: []u8) {
+	header:= (^BMP_FileHeader)(&file[0])^;
+
+	bits := make_slice([]u32, header.width * header.height);
+	initBitmap(bitmap, header.width, header.height, bits);
+
+	_readBitmapPixelsFromFileData(bitmap, file[header.data_offset:]);
+}
+readBitmapFromFile :: proc{_readBitmapFromFile, _allocateAndReadBitmapFromFile};
 
 printBitmap :: proc(using bm: ^Bitmap) {
 	fmt.printf(TEXT_COLOR__RESET);
@@ -138,7 +149,7 @@ drawBitmapToScale :: proc(from, to: ^Bitmap) {
 }
 
 sampleBitmap :: inline proc(using bm: ^Bitmap, u, v: f32, pixel: ^Pixel) do
-	pixel^ = pixels[i32(v * f32(TEXTURE_HEIGHT))][i32(u * f32(TEXTURE_WIDTH))];
+	pixel^ = pixels[i32(v * f32(height))][i32(u * f32(width))];
 
 BMP_FileHeader :: struct #packed {
 	file_type : u16,  // Type of the file

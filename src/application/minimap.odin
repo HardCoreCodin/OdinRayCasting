@@ -13,34 +13,20 @@ MINIMAP__TILES_BITMAP_HEIGHT      :: MINIMAP__MAX_SCALE_FACTOR * MAX_TILE_MAP_HE
 MINIMAP__TILES_BITMAP_PIXEL_COUNT :: MINIMAP__TILES_BITMAP_WIDTH * MINIMAP__TILES_BITMAP_HEIGHT;
 MINIMAP__CANVAS_BITMAP_PIXEL_COUNT :: MINIMAP__MAX_SIZE * MINIMAP__MAX_SIZE;
 
-MinimapTilesBitmap :: struct {
-	using bitmap: Bitmap,
-	bits: ^[MINIMAP__TILES_BITMAP_PIXEL_COUNT]u32
-};
-
-initMinimapTilesBitmap :: proc(using mmtbm: ^MinimapTilesBitmap) {
-	bits = new([MINIMAP__TILES_BITMAP_PIXEL_COUNT]u32);
-	initBitmap(&bitmap, MINIMAP__TILES_BITMAP_WIDTH, MINIMAP__TILES_BITMAP_HEIGHT, bits^[:]);
-	clearBitmap(&bitmap);
-}
-
-MinimapCanvasBitmap :: struct {
-	using bitmap: Bitmap,
-	bits: ^[MINIMAP__CANVAS_BITMAP_PIXEL_COUNT]u32
-};
-
-initMinimapCanvasBitmap :: proc(using mmcbm: ^MinimapCanvasBitmap, transparent: bool = false) {
-	bits = new([MINIMAP__CANVAS_BITMAP_PIXEL_COUNT]u32);
-	initBitmap(&bitmap, MINIMAP__MAX_SIZE, MINIMAP__MAX_SIZE, bits^[:]);
-	clearBitmap(&bitmap, transparent);
-}
+minimap_canvas_buffer: [2 *  MINIMAP__CANVAS_BITMAP_PIXEL_COUNT]u32;
+minimap_textures_buffer: [3 * MINIMAP__TILES_BITMAP_PIXEL_COUNT]u32;
 
 MiniMap :: struct {
-	using canvas: MinimapCanvasBitmap,
-	line_of_sight_canvas: MinimapCanvasBitmap,
-	walls_bitmap,
-	floor_bitmap,
-	ceiling_bitmap: MinimapTilesBitmap,
+	using tile_map_textures: TileMapTextures,
+	
+	canvas,	
+	line_of_sight_canvas: Bitmap,
+
+	walls_bits,
+	floor_bits,
+	ceiling_bits,
+	canvas_bits,
+	line_of_sight_canvas_bits: []u32,	
 
 	screen_bounds: Bounds2Di,
 	screen_position: ^vec2i,
@@ -59,16 +45,17 @@ MiniMap :: struct {
  	zoom, 
  	resize: AmountAndFactor,
 
+	scale_factor: f32,
+
+	mip_level,
+	mip_width,
+	mip_height: i32,
+
 	panned,
 	toggled,
 	is_visible,
-	is_debug_visible: bool,
-
-	scale_factor: f32
+	is_debug_visible: bool
 }
-
-moveMiniMap :: inline proc(using mm: ^MiniMap, movement: vec2) do top_left += movement;
-
 initMiniMap :: proc(using mm: ^MiniMap, tm: ^TileMap, origin_position: ^vec2) {
 	tile_map = tm;
 	origin = origin_position;
@@ -86,15 +73,28 @@ initMiniMap :: proc(using mm: ^MiniMap, tm: ^TileMap, origin_position: ^vec2) {
 	vertex_color = GREEN;
 	tile_color = BLUE;
 
-	initMinimapTilesBitmap(&walls_bitmap);
-	initMinimapTilesBitmap(&floor_bitmap);
-	initMinimapTilesBitmap(&ceiling_bitmap);
-
-	initMinimapCanvasBitmap(&canvas);
-	initMinimapCanvasBitmap(&line_of_sight_canvas, true);
+	canvas_bits = minimap_canvas_buffer[0:MINIMAP__CANVAS_BITMAP_PIXEL_COUNT];
+	line_of_sight_canvas_bits = minimap_canvas_buffer[MINIMAP__CANVAS_BITMAP_PIXEL_COUNT:MINIMAP__CANVAS_BITMAP_PIXEL_COUNT*2];
+	walls_bits = minimap_textures_buffer[0:MINIMAP__TILES_BITMAP_PIXEL_COUNT];
+	floor_bits = minimap_textures_buffer[MINIMAP__TILES_BITMAP_PIXEL_COUNT:MINIMAP__TILES_BITMAP_PIXEL_COUNT*2];
+	ceiling_bits = minimap_textures_buffer[MINIMAP__TILES_BITMAP_PIXEL_COUNT*2:MINIMAP__TILES_BITMAP_PIXEL_COUNT*3];
+	
+	initBitmap(&canvas,               MINIMAP__MAX_SIZE, MINIMAP__MAX_SIZE, canvas_bits);
+	initBitmap(&line_of_sight_canvas, MINIMAP__MAX_SIZE, MINIMAP__MAX_SIZE, line_of_sight_canvas_bits);
+	initBitmap(&walls  , MINIMAP__TILES_BITMAP_WIDTH, MINIMAP__TILES_BITMAP_HEIGHT, walls_bits);
+	initBitmap(&floor  , MINIMAP__TILES_BITMAP_WIDTH, MINIMAP__TILES_BITMAP_HEIGHT, floor_bits);
+	initBitmap(&ceiling, MINIMAP__TILES_BITMAP_WIDTH, MINIMAP__TILES_BITMAP_HEIGHT, ceiling_bits);	
+	
+	clearBitmap(&canvas);
+	clearBitmap(&line_of_sight_canvas, true);
+	clearBitmap(&walls);
+	clearBitmap(&floor);
+	clearBitmap(&ceiling);
 
 	resizeMiniMap(mm, MINIMAP__MID_SIZE);
 }
+
+moveMiniMap :: inline proc(using mm: ^MiniMap, movement: vec2) do top_left += movement;
 
 zoomMiniMap :: inline proc(using mm: ^MiniMap) {
     zoom.amount += mouse_wheel_scroll_amount;
@@ -112,36 +112,46 @@ resizeMiniMapByMouseWheel :: inline proc(using mm: ^MiniMap) {
 }
 
 resizeMiniMap :: inline proc(using mm: ^MiniMap, new_size: i32) {
-	size = clamp(new_size, MINIMAP__MIN_SIZE, MINIMAP__MAX_SIZE);
-	initBitmap(&bitmap, size, size, bits^[:]);
+	size := clamp(new_size, MINIMAP__MIN_SIZE, MINIMAP__MAX_SIZE);
+	initBitmap(&canvas, size, size, canvas_bits);
 	resetMiniMapSize(mm);
-	screen_bounds.max.x = screen_bounds.min.x + width;
-	screen_bounds.max.y = screen_bounds.min.y + height;
+	screen_bounds.max.x = screen_bounds.min.x + canvas.width;
+	screen_bounds.max.y = screen_bounds.min.y + canvas.height;
 }
 
 resetMiniMapSize :: proc(using mm: ^MiniMap) {
-	resize.factor = f32(width) / MINIMAP__MID_SIZE;
+	resize.factor = f32(canvas.width) / MINIMAP__MID_SIZE;
 	scale_factor = resize.factor * zoom.factor;
-	center.x = f32(width) / 2;
-	center.y = f32(height) / 2;
+	center.x = f32(canvas.width) / 2;
+	center.y = f32(canvas.height) / 2;
 	offset = center + pan;
 	top_left = offset - origin^ * scale_factor;
 
 	pixel_size := scale_factor / TEXTURE_WIDTH;
-	new_width := i32(f32(wall_tiles_texture.width) * pixel_size); 
-	new_height := i32(f32(wall_tiles_texture.height) * pixel_size);
+	new_width := i32(f32(map_textures[0].walls.width) * pixel_size); 
+	new_height := i32(f32(map_textures[0].walls.height) * pixel_size);
 
-	resizeBitmap(&walls_bitmap.bitmap, new_width, new_height);
-	resizeBitmap(&floor_bitmap.bitmap, new_width, new_height);
-	resizeBitmap(&ceiling_bitmap.bitmap, new_width, new_height);
+	resizeBitmap(&walls,   new_width, new_height);
+	resizeBitmap(&floor,   new_width, new_height);
+	resizeBitmap(&ceiling, new_width, new_height);
 
-	clearBitmap(&walls_bitmap.bitmap, true);
-	clearBitmap(&floor_bitmap.bitmap);
-	clearBitmap(&ceiling_bitmap.bitmap);
+	clearBitmap(&walls);
+	clearBitmap(&floor);
+	clearBitmap(&ceiling);
 
-	drawBitmapToScale(&wall_tiles_texture, &walls_bitmap.bitmap);
-	drawBitmapToScale(&floor_tiles_texture, &floor_bitmap.bitmap);
-	drawBitmapToScale(&ceiling_tiles_texture, &ceiling_bitmap.bitmap);
+	mip_level = 0;
+	mip_width = TEXTURE_WIDTH;
+	mip_height = TEXTURE_HEIGHT;
+	for pixel_size < 1 && mip_level < (MIP_COUNT - 1) {
+		pixel_size += pixel_size;
+		mip_level += 1;
+		mip_width >>= 1;
+		mip_height >>= 1;
+	}
+
+	drawBitmapToScale(walls_mips[mip_level], &walls);
+	drawBitmapToScale(floor_mips[mip_level], &floor);
+	drawBitmapToScale(ceiling_mips[mip_level], &ceiling);
 }
 
 panMiniMap :: inline proc(using mm: ^MiniMap) {
@@ -161,10 +171,10 @@ panMiniMap :: inline proc(using mm: ^MiniMap) {
 }
 
 drawMiniMap :: inline proc(using mm: ^MiniMap) {
-	clearBitmap(&bitmap, true);
+	clearBitmap(&canvas, true);
 
-	drawBitmap(&floor_bitmap, &canvas, i32(top_left.x), i32(top_left.y));
-	drawBitmap(&walls_bitmap, &canvas, i32(top_left.x), i32(top_left.y));
+	drawBitmap(&floor, &canvas, i32(top_left.x), i32(top_left.y));
+	drawBitmap(&walls, &canvas, i32(top_left.x), i32(top_left.y));
 	// for pixel in &canvas.all_pixels do pixel.opacity = 254;
 
 	// for row, y in &tile_map.tiles do
@@ -199,9 +209,9 @@ drawMiniMap :: inline proc(using mm: ^MiniMap) {
 	
 	padding: vec2 = {1, 1};
 
-	clearBitmap(&line_of_sight_canvas.bitmap, true);
-	for ray in &rays do drawLine(&line_of_sight_canvas.bitmap, offset, offset + (ray.hit.position - origin^)*scale_factor, ray_color, 64);
-	drawBitmap(&line_of_sight_canvas.bitmap, &canvas);
+	clearBitmap(&line_of_sight_canvas, true);
+	for ray in &rays do drawLine(&line_of_sight_canvas, offset, offset + (ray.hit.position - origin^)*scale_factor, ray_color, 64);
+	drawBitmap(&line_of_sight_canvas, &canvas);
 		
 	// if is_debug_visible do
 	// 	for edge in &tile_map.edges {
@@ -210,5 +220,5 @@ drawMiniMap :: inline proc(using mm: ^MiniMap) {
 	// 		fillRect(&bitmap, from^ - padding, from^ + padding, vertex_color);
 	// 		fillRect(&bitmap, to^   - padding, to^   + padding, vertex_color);
 	// 	}
-	fillCircle(&bitmap, offset, max(scale_factor * body_radius, 1), center_color);
+	fillCircle(&canvas, offset, max(scale_factor * body_radius, 1), center_color);
 }
