@@ -106,18 +106,20 @@ setMips :: proc(mips: []^Bitmap) {
 	// printBitmap(mips[3]);
 }
 
-setBlockedBitmap :: proc(blocked_bitmap: ^BlockedBitmap, using bitmap: ^Bitmap, smear_edges: bool = false, wrap_edges: bool = false) {
+setBlockedBitmap :: proc(blocked_bitmap: ^BlockedBitmap, using bitmap: ^Bitmap, smear_edges: bool = true, wrap_edges: bool = false) {
 	tl, tr, bl, br: ^Pixel;
-	TLi, TRi, BLi, BRi: i32; 
+	
+	i: [4]i32; 
 
-	top_row_offset,
-	bottom_row_offset: i32;
-	bottom_row_offset = width;
+	T,
+	B: i32;
+	B = width;
 
-	first_pixel_index: i32;
-	last_pixel_index: i32 = size - 1;
-	last_pixel_in_row: i32 = width - 1;
-	first_pixel_of_last_row: i32 = last_pixel_index - last_pixel_in_row;
+	L: i32;
+	BR: i32 = size - 1;
+	R: i32 = width - 1;
+	BL: i32 = BR - R;
+	__: i32 = -1;
 
 	x, y,
 	X, Y: i32;
@@ -130,171 +132,118 @@ setBlockedBitmap :: proc(blocked_bitmap: ^BlockedBitmap, using bitmap: ^Bitmap, 
 			X = i32(column_index);
 			x = X - 1;
 
+			i = {T+x, T+x+1,
+				 B+x, B+x+1};
+
 			if wrap_edges {
 				if (X == 0 || X == width) {  
-					if (Y == 0 || Y == height) { // TL/TR/BL/BR
-						TLi = last_pixel_index;
-						TRi = first_pixel_of_last_row;
-						BLi = last_pixel_in_row;
-						BRi = first_pixel_index;
-					} else { // L/R:
-						TLi = top_row_offset + last_pixel_in_row;
-						TRi = top_row_offset;
-						BLi = bottom_row_offset + last_pixel_in_row;
-						BRi = bottom_row_offset;						
-					}
-				} else {
-					if (Y == 0 || Y == height) { // T/B
-						TLi = first_pixel_of_last_row + x;
-						TRi = first_pixel_of_last_row + x + 1;
-						BLi = x;
-						BRi = x + 1;
-					} else {
-						TLi = x + top_row_offset;
-						TRi = x + top_row_offset + 1;
-						BLi = x + bottom_row_offset;
-						BRi = x + bottom_row_offset + 1;	
-					}
-				}
+					if (Y == 0 || Y == height) do i = { // TL/TR/BL/BR
+						BR, BL,
+				        R,  L
+				    }; else do i = { // L/R:
+				    	T+R, T,  
+				    	B+R, B
+				    };
+				} else if (Y == 0 || Y == height) do i = { // T/B
+					BL+x, BL+x+1,
+				    x,    x+1
+				};
 			} else if smear_edges {
 				if Y == 0 {
-					if X == 0 { // TL
-						TLi = first_pixel_index;
-						TRi = first_pixel_index;
-						BLi = first_pixel_index;
-						BRi = first_pixel_index;			
-					} else if X == width { // TR
-						TLi = last_pixel_in_row;
-						TRi = last_pixel_in_row;
-						BLi = last_pixel_in_row;
-						BRi = last_pixel_in_row;
-					} else { // T
-						TLi = x;
-						TRi = x + 1;
-						BLi = x;
-						BRi = x + 1;
-					}
+					if X == 0 do i = { // TL
+						L, L,
+				        L, L
+				    }; else if X == width do i = { // TR
+						R, R,
+				        R, R
+				    }; else do i = { // T
+						x, x+1,
+				        x, x+1
+					};
 				} else if Y == height {
-					if X == 0 { // BL
-						TLi = first_pixel_of_last_row;
-						TRi = first_pixel_of_last_row;
-						BLi = first_pixel_of_last_row;
-						BRi = first_pixel_of_last_row;			
-					} else if X == width { // BR
-						TLi = last_pixel_index;
-						TRi = last_pixel_index;
-						BLi = last_pixel_index;
-						BRi = last_pixel_index;
-					} else { // B
-						TLi = first_pixel_of_last_row + x;
-						TRi = first_pixel_of_last_row + x + 1;
-						BLi = first_pixel_of_last_row + x;
-						BRi = first_pixel_of_last_row + x + 1;
-					}
+					if X == 0 do i = { // BL
+						BL, BL,
+				        BL, BL		
+					}; else if X == width do i = { // BR
+						BR, BR,
+				        BR, BR
+					}; else do i = { // B
+						BL+x, BL+x+1,
+				        BL+x, BL+x+1
+					};
 				} else { 
-					if X == 0 { // T
-						TLi = top_row_offset;
-						TRi = top_row_offset;
-						BLi = bottom_row_offset;			
-						BRi = bottom_row_offset;
-					} else if X == width { // R
-						TLi = top_row_offset + last_pixel_in_row;
-						TRi = top_row_offset + last_pixel_in_row;
-						BLi = bottom_row_offset + last_pixel_in_row;
-						BRi = bottom_row_offset + last_pixel_in_row;	
-					} else {
-						TLi = x + top_row_offset;
-						TRi = x + top_row_offset + 1;
-						BLi = x + bottom_row_offset;
-						BRi = x + bottom_row_offset + 1;
-					}
+					if X == 0 do i = { // T
+						T, T,
+				        B, B
+					}; else if X == width do i = { // R
+						T+R, T+R,
+				        B+R, B+R
+					};
 				}
 			} else {
 				if Y == 0 { 
-					if X == 0 { // TL
-						TLi = -1;
-						TRi = -1;
-						BLi = -1;
-						BRi = first_pixel_index;			
-					} else if X == width { // TR
-						TLi = -1;
-						TRi = -1;
-						BLi = last_pixel_in_row;
-						BRi = -1;
-					} else { // T
-						TLi = -1;
-						TRi = -1;
-						BLi = x;
-						BRi = x + 1;
-					}
+					if X == 0 do i = { // TL
+						__, __,
+				        __, L		
+					}; else if X == width do i = { // TR
+						__, __,
+				        R, __
+					}; else do i = { // T
+						__, __,
+				        x, x+1
+					};
 				} else if Y == height { 
-					if X == 0 { // BL
-						TLi = -1;
-						TRi = first_pixel_of_last_row;
-						BLi = -1;
-						BRi = -1;			
-					} else if X == width { // BR
-						TLi = last_pixel_index;
-						TRi = -1;
-						BLi = -1;
-						BRi = -1;
-					} else { // B
-						TLi = first_pixel_of_last_row + x;
-						TRi = first_pixel_of_last_row + x + 1;
-						BLi = -1;
-						BRi = -1;	
-					}
+					if X == 0 do i = { // BL
+						__, BL,
+				        __, __		
+					}; else if X == width do i = { // BR
+						BR, __,
+				        __,  __
+					}; else do i = { // B
+						BL+x, BL+x+1,
+				        __,    __ 
+					};
 				} else { 
-					if X == 0 { // L
-						TLi = -1;
-						TRi = top_row_offset;
-						BLi = -1;			
-						BRi = bottom_row_offset;
-					} else if X == width { // R
-						TLi = top_row_offset + last_pixel_in_row;
-						TRi = -1;
-						BLi = bottom_row_offset + last_pixel_in_row;
-						BRi = -1;
-					} else {
-						TLi = x + top_row_offset;
-						TRi = x + top_row_offset + 1;
-						BLi = x + bottom_row_offset;
-						BRi = x + bottom_row_offset + 1;
-					}
+					if X == 0 do i = { // L
+						__, T,
+				        __, B
+					}; else if X == width do i ={ // R
+						T+R, __,
+				        B+R, __
+					};
 				}
 			}
 
-			tl = TLi == -1 ? &BLACK_PIXEL : &all_pixels[TLi];
-			tr = TRi == -1 ? &BLACK_PIXEL : &all_pixels[TRi];
-			bl = BLi == -1 ? &BLACK_PIXEL : &all_pixels[BLi];
-			br = BRi == -1 ? &BLACK_PIXEL : &all_pixels[BRi];
+			tl = i[0] == __ ? &BLACK_PIXEL : &all_pixels[i[0]];
+			tr = i[1] == __ ? &BLACK_PIXEL : &all_pixels[i[1]];
+			bl = i[2] == __ ? &BLACK_PIXEL : &all_pixels[i[2]];
+			br = i[3] == __ ? &BLACK_PIXEL : &all_pixels[i[3]];
 
-			using pixel_block;
 
-			TL.r = f32(tl.R);
-			TR.r = f32(tr.R);
-			BL.r = f32(bl.R);
-			BR.r = f32(br.R);
+			pixel_block.TL.r = f32(tl.R);
+			pixel_block.TR.r = f32(tr.R);
+			pixel_block.BL.r = f32(bl.R);
+			pixel_block.BR.r = f32(br.R);
 
-			TL.g = f32(tl.G);
-			TR.g = f32(tr.G);
-			BL.g = f32(bl.G);
-			BR.g = f32(br.G);
+			pixel_block.TL.g = f32(tl.G);
+			pixel_block.TR.g = f32(tr.G);
+			pixel_block.BL.g = f32(bl.G);
+			pixel_block.BR.g = f32(br.G);
 
-			TL.b = f32(tl.B);
-			TR.b = f32(tr.B);
-			BL.b = f32(bl.B);
-			BR.b = f32(br.B);
+			pixel_block.TL.b = f32(tl.B);
+			pixel_block.TR.b = f32(tr.B);
+			pixel_block.BL.b = f32(bl.B);
+			pixel_block.BR.b = f32(br.B);
 
-			TL.a = f32(tl.opacity);
-			TR.a = f32(tr.opacity);
-			BL.a = f32(bl.opacity);
-			BR.a = f32(br.opacity);
+			pixel_block.TL.a = f32(tl.opacity);
+			pixel_block.TR.a = f32(tr.opacity);
+			pixel_block.BL.a = f32(bl.opacity);
+			pixel_block.BR.a = f32(br.opacity);
 		}
 
 		if Y != 0 {
-			top_row_offset = bottom_row_offset;
-			bottom_row_offset += width;
+			T = B;
+			B += width;
 		}
 	}
 }
