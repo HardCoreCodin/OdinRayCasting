@@ -2,6 +2,11 @@ package application
 
 Color :: struct #packed {B, G, R: u8}
 
+FloatColor :: struct #raw_union {
+	using components: struct { R, G, B, A: f32},
+	array: [4]f32
+}
+
 BLACK: Color;
 GREY: Color = {
 	R = 0x88,
