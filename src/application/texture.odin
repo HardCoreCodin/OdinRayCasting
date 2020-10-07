@@ -248,30 +248,71 @@ setBlockedBitmap :: proc(blocked_bitmap: ^BlockedBitmap, using bitmap: ^Bitmap, 
 	}
 }
 
-sampleBlockedBitmap :: inline proc(using blocked_bitmap: ^BlockedBitmap, u, v: f32, pixel: ^Pixel, factor: f32 = 1) {
-	U := u * f32(width) - 0.5;
-	V := v * f32(height) - 0.5;
+SIMD128 :: #simd [4]f32;
+SIMD_vec4 :: struct #raw_union {
+	vec: vec4,
+	simd: SIMD128
+};
 
-	x := i32(U);
-	y := i32(V);
+SIMD_TL,
+SIMD_TR,
+SIMD_BL,
+SIMD_BR,
+SIMD_br,
+SIMD_bl,
+SIMD_tr,
+SIMD_tl,
+SIMD_bottom,
+SIMD_bottom_ratio: SIMD_vec4;
+
+
+SIMD256 :: #simd [8]f32;
+SIMD_vec8 :: struct #raw_union {
+	vec: [8]f32,
+	simd: SIMD256
+};
+
+SIMD_L , SIMD_R , SIMD_T , SIMD_B ,
+SIMD_Lr, SIMD_Rr, SIMD_Tr, SIMD_Br: SIMD_vec8;
+
+sampleBlockedBitmap :: inline proc(using blocked_bitmap: ^BlockedBitmap, u, v: f32, color: ^vec4) {
+	U := u * f32(width ) - 0.5; x := i32(U);
+	V := v * f32(height) - 0.5; y := i32(V);
+	r := U - f32(x); l := 1 - r;
+	b := V - f32(y); t := 1 - b;
 
 	samples := &pixel_blocks[y][x];
-
-	right_ratio  := U - f32(x);
-	bottom_ratio := V - f32(y);
-	
-	left_ratio := 1 - right_ratio;
-	top_ratio := 1 - bottom_ratio;
-
 	using samples;
-	top := TL * left_ratio + TR * right_ratio;
-	bottom := BL * left_ratio + BR * right_ratio;
-	result := top * top_ratio + bottom * bottom_ratio;
+	color^ = TL*t*l + TR*t*r + BL*b*l + BR*b*r;
 
-	pixel.R = u8(result.r);
-	pixel.G = u8(result.g);
-	pixel.B = u8(result.b);
-	pixel.opacity = u8(result.a);
+	// tl:= t*l;  tr:= t*r;
+	// bl:= b*l;  br:= b*r;
+
+	// SIMD_Lr.vec = {tl, tl, tl, tl, bl, bl, bl, bl};
+	// SIMD_Rr.vec = {tr, tr, tr, tr, br, br, br, br};
+	// SIMD_L.vec = {TL.r, TL.b, TL.b, TL.a, BL.r, BL.g, BL.b, BL.a};
+	// SIMD_R.vec = {TR.r, TR.b, TR.b, TR.a, BR.r, BR.g, BR.b, BR.a};
+
+	// SIMD_L.simd *= SIMD_Lr.simd;
+	// SIMD_R.simd *= SIMD_Rr.simd;
+
+	// SIMD_L.simd += SIMD_R.simd;
+	// SIMD_R.vec = {SIMD_L.vec[4], SIMD_L.vec[5], SIMD_L.vec[6], SIMD_L.vec[7], 0, 0, 0, 0};
+	
+	// result := SIMD_TL.vec[:4];
+
+	// SIMD_tl.vec = t*l;  SIMD_tr.vec = t*r;
+	// SIMD_bl.vec = b*l;  SIMD_br.vec = b*r;
+
+	// SIMD_TL.vec = TL; SIMD_TL.simd *= SIMD_tl.simd;
+	// SIMD_TR.vec = TR; SIMD_TR.simd *= SIMD_tr.simd;
+	// SIMD_BL.vec = BL; SIMD_BL.simd *= SIMD_bl.simd;
+	// SIMD_BR.vec = TR; SIMD_BR.simd *= SIMD_br.simd;
+
+	// SIMD_TL.simd += SIMD_TR.simd;
+	// SIMD_TL.simd += SIMD_BR.simd;
+	// SIMD_TL.simd += SIMD_BL.simd;
+	// result := SIMD_TL.vec;
 }
 
 readTextureFromFile :: proc(texture: ^Texture, file: []u8) {

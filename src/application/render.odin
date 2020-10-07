@@ -202,42 +202,76 @@ drawWalls :: proc(using cam: ^Camera2D) {
     max_distance := half_width * focal_length;
 
     vertical_hit: ^VerticalHit;
-    texture: ^Bitmap;
+    texture, other_texture: ^BlockedBitmap;
     pixel: Pixel;
+    float_pixel, other_float_pixel: vec4;
 
     floor_pixel_offset := size - width;
     ceiling_pixel_offset: i32;
 
-	mip_level: u8 = 0;
+	mip_level: i32 = 0;
+    
+	current_mip_factor,
+	next_mip_factor: f32;
+
     floor_texture,
-	ceiling_texture: ^Bitmap;
+	ceiling_texture,
+    other_floor_texture,
+	other_ceiling_texture: ^BlockedBitmap;
 
     for vertical_hit_row, y in &vertical_hits {
     	mip_level = vertical_hit_infos[y].mip_level;
-		floor_texture := &blocked_textures[mip_level][FLOOR_TEXTURE_ID];
-		ceiling_texture := &blocked_textures[mip_level][CEILING_TEXTURE_ID];
+    	current_mip_factor = vertical_hit_infos[y].mip_factor;
+    	next_mip_factor = 1 - current_mip_factor;
 
+		if toggle2 {		
+			floor_texture = &blocked_textures[max(mip_level-1, 0)][FLOOR_TEXTURE_ID];
+			ceiling_texture = &blocked_textures[max(mip_level-1, 0)][CEILING_TEXTURE_ID];
+		
+			other_floor_texture = &blocked_textures[min(mip_level, MIP_COUNT - 1)][FLOOR_TEXTURE_ID];
+			other_ceiling_texture = &blocked_textures[min(mip_level, MIP_COUNT-1)][CEILING_TEXTURE_ID];
+		} else {
+			floor_texture = &blocked_textures[mip_level][FLOOR_TEXTURE_ID];
+			ceiling_texture = &blocked_textures[mip_level][CEILING_TEXTURE_ID];
+		}		
+		
         for vertical_hit, x in &vertical_hit_row {
             if !vertical_hit.found do continue;
 
             dim_factor = vertical_hit.info.dim_factor;
 
-            sampleBlockedBitmap(floor_texture, vertical_hit.u, vertical_hit.v, &pixel);
-            // pixel.color.R = u8(clamp(dim_factor * f32(pixel.color.R), 0, MAX_COLOR_VALUE));
-            // pixel.color.G = u8(clamp(dim_factor * f32(pixel.color.G), 0, MAX_COLOR_VALUE));
-            // pixel.color.B = u8(clamp(dim_factor * f32(pixel.color.B), 0, MAX_COLOR_VALUE));
+            sampleBlockedBitmap(floor_texture, vertical_hit.u, vertical_hit.v, &float_pixel);
+
+            if toggle2 {
+	            sampleBlockedBitmap(other_floor_texture, vertical_hit.u, vertical_hit.v, &other_float_pixel);
+	            float_pixel = current_mip_factor*float_pixel + next_mip_factor*other_float_pixel;
+            }
+            float_pixel *= dim_factor;
+            pixel.R = u8(float_pixel.r);
+            pixel.G = u8(float_pixel.g);
+            pixel.B = u8(float_pixel.b);
             all_pixels[floor_pixel_offset + i32(x)] = pixel;
 
-            sampleBlockedBitmap(ceiling_texture, vertical_hit.u, vertical_hit.v, &pixel);
-            // pixel.color.R = u8(clamp(dim_factor * f32(pixel.color.R), 0, MAX_COLOR_VALUE));
-            // pixel.color.G = u8(clamp(dim_factor * f32(pixel.color.G), 0, MAX_COLOR_VALUE));
-            // pixel.color.B = u8(clamp(dim_factor * f32(pixel.color.B), 0, MAX_COLOR_VALUE));
+            sampleBlockedBitmap(ceiling_texture, vertical_hit.u, vertical_hit.v, &float_pixel);
+            if toggle2 {
+            	sampleBlockedBitmap(other_ceiling_texture, vertical_hit.u, vertical_hit.v, &other_float_pixel);	
+            	float_pixel = current_mip_factor*float_pixel + next_mip_factor*other_float_pixel;
+            }
+            
+            float_pixel *= dim_factor;
+            pixel.R = u8(float_pixel.r);
+            pixel.G = u8(float_pixel.g);
+            pixel.B = u8(float_pixel.b);
             all_pixels[ceiling_pixel_offset + i32(x)] = pixel;
         }
 
         floor_pixel_offset   -= width;
         ceiling_pixel_offset += width;
     }
+
+    texture_height_ratio,
+    current_mip_level: f32;  
+    current_mip_levelI: i32;
 
     for ray, x in &rays {
         using ray;
@@ -250,23 +284,42 @@ drawWalls :: proc(using cam: ^Camera2D) {
 
         column_height = i32(max_distance / distance);
 
-    	mip_level = u8(min(f32(MIP_COUNT) * (f32(height / 32) / f32(column_height)), MIP_COUNT-1)); 
-        texture = &textures[mip_level][hit.tile.texture_id];
-
-        top    = column_height < height ? (height - column_height) / 2 : 0;
+    	top    = column_height < height ? (height - column_height) / 2 : 0;
         bottom = column_height < height ? (height + column_height) / 2 : height;
 
         texel_height = 1 / f32(column_height);
         v = column_height > height ? f32((column_height - height) / 2) * texel_height : 0;
         u = hit.tile_fraction;
-        
+
+        texture_height_ratio = texel_height * TEXTURE_HEIGHT / 14;
+		current_mip_level = f32(MIP_COUNT) * 0.9;
+        for (current_mip_level / f32(MIP_COUNT)) > texture_height_ratio do current_mip_level *= 0.9;
+        current_mip_levelI = i32(current_mip_level);
+        current_mip_factor = current_mip_level - f32(current_mip_levelI);
+        next_mip_factor = 1 - current_mip_factor;
+		mip_level = current_mip_levelI;
+		// print(current_mip_level, current_mip_factor, next_mip_factor);
+
+		if toggle2 {	
+	        texture = &blocked_textures[max(mip_level-1, 0)][hit.tile.texture_id];
+	        other_texture = &blocked_textures[min(mip_level, MIP_COUNT-1)][hit.tile.texture_id];
+		} else do texture = &blocked_textures[mip_level][hit.tile.texture_id];
+
         pixel_offset = top * width + i32(x);
         for y in top..<bottom {            
-            sampleBitmap(texture, u, v, &pixel);
-
-            pixel.color.R = u8(clamp(dim_factor * f32(pixel.color.R), 0, MAX_COLOR_VALUE));
-            pixel.color.G = u8(clamp(dim_factor * f32(pixel.color.G), 0, MAX_COLOR_VALUE));
-            pixel.color.B = u8(clamp(dim_factor * f32(pixel.color.B), 0, MAX_COLOR_VALUE));
+            sampleBlockedBitmap(texture, u, v, &float_pixel);
+            
+            if toggle2 {
+	            sampleBlockedBitmap(other_texture, u, v, &other_float_pixel);
+	            float_pixel = current_mip_factor * float_pixel + next_mip_factor * other_float_pixel;
+            }
+            float_pixel *= dim_factor;
+            pixel.R = u8(float_pixel.r);
+            pixel.G = u8(float_pixel.g);
+            pixel.B = u8(float_pixel.b);
+            // pixel.color.R = u8(clamp(dim_factor * f32(pixel.color.R), 0, MAX_COLOR_VALUE));
+            // pixel.color.G = u8(clamp(dim_factor * f32(pixel.color.G), 0, MAX_COLOR_VALUE));
+            // pixel.color.B = u8(clamp(dim_factor * f32(pixel.color.B), 0, MAX_COLOR_VALUE));
 
             all_pixels[pixel_offset] = pixel;
             

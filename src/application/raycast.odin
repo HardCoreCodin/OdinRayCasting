@@ -28,8 +28,10 @@ all_rays: [FRAME_BUFFER__MAX_WIDTH]Ray;
 rays: []Ray;
 
 VerticalHitInfo :: struct {
-    distance, dim_factor: f32,
-    mip_level: u8
+    distance, 
+    dim_factor,
+    mip_factor: f32,
+    mip_level: i32
 }
 all_vertical_hit_infos: [FRAME_BUFFER__MAX_HEIGHT/2]VerticalHitInfo;
 vertical_hit_infos: []VerticalHitInfo;
@@ -105,12 +107,21 @@ generateRays :: proc() {
     num_vertical_hit_infos := len(vertical_hit_infos); 
 
     vertical_hit_info: ^VerticalHitInfo;
+    current_mip_level: f32 = MIP_COUNT;  
+    current_mip_levelI: i32;
+
     for y in 1..num_vertical_hit_infos {
         vertical_hit_info = &vertical_hit_infos[num_vertical_hit_infos - y];
         using vertical_hit_info;
+        
         distance = 1 / (2 * f32(y));
         dim_factor = 1 - distance * half_height * distance_factor + MIN_DIM_FACTOR;
-        mip_level = u8(f32(MIP_COUNT/2) * (1 - f32(y) / f32(num_vertical_hit_infos))); 
+        
+        current_mip_level *= 0.975;
+        current_mip_levelI = i32(current_mip_level);
+        
+        mip_level = current_mip_levelI;
+        mip_factor = current_mip_level - f32(current_mip_levelI);
     }
 
     vertical_hit: ^VerticalHit;
