@@ -24,22 +24,22 @@ _inRect2Df :: inline proc(using r: Rect2Df, p: vec2) -> bool do return _inBounds
 _inRect2Di :: inline proc(using r: Rect2Di, p: vec2i) -> bool do return _inBounds2Di(bounds, p);
 inRect :: proc{_inRect2Df, _inRect2Di};
 
-_drawRect2Di :: inline proc(using bitmap: ^Bitmap, X0, Y0, X1, Y1: i32, color: Color, opacity: u8 = 255) {
-	_drawHLine2Di(bitmap, X0, X1, Y0, color, opacity);
-	_drawHLine2Di(bitmap, X0, X1, Y1, color, opacity);
-	_drawVLine2Di(bitmap, Y0, Y1, X0, color, opacity);
-	_drawVLine2Di(bitmap, Y0, Y1, X1, color, opacity);
+_drawRect2Di :: inline proc(using bitmap: ^$T/Grid, X0, Y0, X1, Y1: i32, pixel: ^$PixelType) {
+	_drawHLine2Di(bitmap, X0, X1, Y0,pixel);
+	_drawHLine2Di(bitmap, X0, X1, Y1,pixel);
+	_drawVLine2Di(bitmap, Y0, Y1, X0,pixel);
+	_drawVLine2Di(bitmap, Y0, Y1, X1,pixel);
 }
-_drawRect2Df :: inline proc(using bitmap: ^Bitmap, X0, Y0, X1, Y1: f32, color: Color, opacity: u8 = 255) do _drawRect2Di(bitmap, i32(X0), i32(Y0), i32(X1), i32(Y1), color, opacity);
-drawBounds2Df :: inline proc(using bitmap: ^Bitmap, using b: ^Bounds2Df, color: Color, opacity: u8 = 255) do _drawRect2Df(bitmap, left, top, right, bottom, color, opacity);
-drawBounds2Di :: inline proc(using bitmap: ^Bitmap, using b: ^Bounds2Di, color: Color, opacity: u8 = 255) do _drawRect2Di(bitmap, left, top, right, bottom, color, opacity);
-drawRect2Df :: inline proc(bitmap: ^Bitmap, using r: ^Rect2Df, color: Color, opacity: u8 = 255) do _drawRect2Df(bitmap, left, top, right, bottom, color, opacity);
-drawRect2Di :: inline proc(bitmap: ^Bitmap, using r: ^Rect2Di, color: Color, opacity: u8 = 255) do _drawRect2Di(bitmap, left, top, right, bottom, color, opacity);
-drawRectByVec2fPair :: inline proc(using bitmap: ^Bitmap, a, b: vec2,  color: Color, opacity: u8 = 255) do _drawRect2Df(bitmap, a.x, a.y, b.x, b.y, color, opacity);
-drawRectByVec2iPair :: inline proc(using bitmap: ^Bitmap, a, b: vec2i, color: Color, opacity: u8 = 255) do _drawRect2Di(bitmap, a.x, a.y, b.x, b.y, color, opacity);
+_drawRect2Df :: inline proc(using bitmap: ^$T/Grid, X0, Y0, X1, Y1: f32, pixel: ^$PixelType) do _drawRect2Di(bitmap, i32(X0), i32(Y0), i32(X1), i32(Y1),pixel);
+drawBounds2Df :: inline proc(using bitmap: ^$T/Grid, using b: ^Bounds2Df, pixel: ^$PixelType) do _drawRect2Df(bitmap, left, top, right, bottom,pixel);
+drawBounds2Di :: inline proc(using bitmap: ^$T/Grid, using b: ^Bounds2Di, pixel: ^$PixelType) do _drawRect2Di(bitmap, left, top, right, bottom,pixel);
+drawRect2Df :: inline proc(bitmap: ^$T/Grid, using r: ^Rect2Df, pixel: ^$PixelType) do _drawRect2Df(bitmap, left, top, right, bottom,pixel);
+drawRect2Di :: inline proc(bitmap: ^$T/Grid, using r: ^Rect2Di, pixel: ^$PixelType) do _drawRect2Di(bitmap, left, top, right, bottom,pixel);
+drawRectByVec2fPair :: inline proc(using bitmap: ^$T/Grid, a, b: vec2,  pixel: ^$PixelType) do _drawRect2Df(bitmap, a.x, a.y, b.x, b.y,pixel);
+drawRectByVec2iPair :: inline proc(using bitmap: ^$T/Grid, a, b: vec2i, pixel: ^$PixelType) do _drawRect2Di(bitmap, a.x, a.y, b.x, b.y,pixel);
 drawRect :: proc{_drawRect2Di, _drawRect2Df, drawRect2Df, drawRect2Di, drawBounds2Df, drawBounds2Di, drawRectByVec2fPair, drawRectByVec2iPair};
 
-_fillRect2Di :: inline proc(using bitmap: ^Bitmap, X0, Y0, X1, Y1: i32, color: Color, opacity: u8 = 255) {
+_fillRect2Di :: inline proc(using bitmap: ^$T/Grid, X0, Y0, X1, Y1: i32, pixel: ^$PixelType) {
 	if Y0 >= height || Y1 < 0 || 
 	   X0 >= width  || X1 < 0 do 
 	   return;
@@ -47,21 +47,19 @@ _fillRect2Di :: inline proc(using bitmap: ^Bitmap, X0, Y0, X1, Y1: i32, color: C
 	x0, x1 := subRange(X0, X1, width);
 	y0, y1 := subRange(Y0, Y1, height);
 	
-	pixel: Pixel = {color = color, opacity = opacity};
-
 	offset := y0 * width;
 	for y in y0..y1 {
-		for i in x0+offset..x1+offset do all_pixels[i] = pixel;
+		for i in x0+offset..x1+offset do setPixel(&_cells[i], pixel);
 		offset += width;
 	}	
 }
-_fillRect2Df :: inline proc(bitmap: ^Bitmap, X0, Y0, X1, Y1: f32, color: Color, opacity: u8 = 255) do _fillRect2Di(bitmap, i32(X0), i32(Y0), i32(X1), i32(Y1), color, opacity);
-fillBounds2Df :: inline proc(bitmap: ^Bitmap, using b: ^Bounds2Df, color: Color, opacity: u8 = 255) do _fillRect2Df(bitmap, left, top, right, bottom, color, opacity);
-fillBounds2Di :: inline proc(bitmap: ^Bitmap, using b: ^Bounds2Di, color: Color, opacity: u8 = 255) do _fillRect2Di(bitmap, left, top, right, bottom, color, opacity);
-fillRect2Df :: inline proc(bitmap: ^Bitmap, using r: ^Rect2Df, color: Color, opacity: u8 = 255) do _fillRect2Df(bitmap, left, top, right, bottom, color, opacity);
-fillRect2Di :: inline proc(bitmap: ^Bitmap, using r: ^Rect2Di, color: Color, opacity: u8 = 255) do _fillRect2Di(bitmap, left, top, right, bottom, color, opacity);
-fillRectByVec2fPair :: inline proc(bitmap: ^Bitmap, a, b: vec2,  color: Color, opacity: u8 = 255) do _fillRect2Df(bitmap, a.x, a.y, b.x, b.y, color, opacity);
-fillRectByVec2iPair :: inline proc(bitmap: ^Bitmap, a, b: vec2i, color: Color, opacity: u8 = 255) do _fillRect2Di(bitmap, a.x, a.y, b.x, b.y, color, opacity);
+_fillRect2Df :: inline proc(bitmap: ^$T/Grid, X0, Y0, X1, Y1: f32, pixel: ^$PixelType) do _fillRect2Di(bitmap, i32(X0), i32(Y0), i32(X1), i32(Y1),pixel);
+fillBounds2Df :: inline proc(bitmap: ^$T/Grid, using b: ^Bounds2Df, pixel: ^$PixelType) do _fillRect2Df(bitmap, left, top, right, bottom,pixel);
+fillBounds2Di :: inline proc(bitmap: ^$T/Grid, using b: ^Bounds2Di, pixel: ^$PixelType) do _fillRect2Di(bitmap, left, top, right, bottom,pixel);
+fillRect2Df :: inline proc(bitmap: ^$T/Grid, using r: ^Rect2Df, pixel: ^$PixelType) do _fillRect2Df(bitmap, left, top, right, bottom,pixel);
+fillRect2Di :: inline proc(bitmap: ^$T/Grid, using r: ^Rect2Di, pixel: ^$PixelType) do _fillRect2Di(bitmap, left, top, right, bottom,pixel);
+fillRectByVec2fPair :: inline proc(bitmap: ^$T/Grid, a, b: vec2,  pixel: ^$PixelType) do _fillRect2Df(bitmap, a.x, a.y, b.x, b.y,pixel);
+fillRectByVec2iPair :: inline proc(bitmap: ^$T/Grid, a, b: vec2i, pixel: ^$PixelType) do _fillRect2Di(bitmap, a.x, a.y, b.x, b.y,pixel);
 fillRect :: proc{_fillRect2Di, _fillRect2Df, fillRect2Df, fillRect2Di, fillBounds2Df, fillBounds2Di, fillRectByVec2fPair, fillRectByVec2iPair};
 
 _areCompRectBoundsOverlappingF :: inline proc(

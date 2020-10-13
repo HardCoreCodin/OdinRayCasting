@@ -3,8 +3,8 @@ package application
 MINIMAP__MIN_SIZE :: 64;
 MINIMAP__MID_SIZE :: 128;
 MINIMAP__MAX_SIZE :: 256;
-MINIMAP__MIN_ZOOM_FACTOR  :: 0.1;
-MINIMAP__MAX_ZOOM_FACTOR  :: 10;
+MINIMAP__MIN_ZOOM_FACTOR  :: 0.5;
+MINIMAP__MAX_ZOOM_FACTOR  :: 20;
 MINIMAP__MIN_RESIZE_FACTOR :: 0.5;
 MINIMAP__MAX_RESIZE_FACTOR :: 2;
 MINIMAP__MAX_SCALE_FACTOR :: MINIMAP__MAX_ZOOM_FACTOR * MINIMAP__MAX_RESIZE_FACTOR;
@@ -13,21 +13,20 @@ MINIMAP__TILES_BITMAP_HEIGHT      :: MINIMAP__MAX_SCALE_FACTOR * MAX_TILE_MAP_HE
 MINIMAP__TILES_BITMAP_PIXEL_COUNT :: MINIMAP__TILES_BITMAP_WIDTH * MINIMAP__TILES_BITMAP_HEIGHT;
 MINIMAP__CANVAS_BITMAP_PIXEL_COUNT :: MINIMAP__MAX_SIZE * MINIMAP__MAX_SIZE;
 
-minimap_canvas_buffer: [2 *  MINIMAP__CANVAS_BITMAP_PIXEL_COUNT]u32;
-minimap_textures_buffer: [3 * MINIMAP__TILES_BITMAP_PIXEL_COUNT]u32;
+all_minimap_bitmap_pixels: [4 * MINIMAP__TILES_BITMAP_PIXEL_COUNT]Pixel;
+// all_scaled_textures_pixels: [8 * 64 * 64]Pixel;
+// scaled_textures: [8]Bitmap;
 
 MiniMap :: struct {
-	using tile_map_textures: TileMapTextures,
+	size: struct { pixel, scaled, scaled_tile, tile, tile_map: Size2Df},
+	canvas_pixels: [MINIMAP__CANVAS_BITMAP_PIXEL_COUNT]Pixel,
+
+	walls, scaled_walls,
+	floor, scaled_floor,
+	ceiling, scaled_ceiling,
+	view,
+	canvas: Bitmap,
 	
-	canvas,	
-	line_of_sight_canvas: Bitmap,
-
-	walls_bits,
-	floor_bits,
-	ceiling_bits,
-	canvas_bits,
-	line_of_sight_canvas_bits: []u32,	
-
 	screen_bounds: Bounds2Di,
 	screen_position: ^vec2i,
 	origin: ^vec2,
@@ -40,16 +39,15 @@ MiniMap :: struct {
 	back_edge_color,
 	vertex_color,
 	tile_color,
-	ray_color: Color,
+	ray_color: Pixel,
  
  	zoom, 
  	resize: AmountAndFactor,
 
-	scale_factor: f32,
-
+	mip_count,
 	mip_level,
-	mip_width,
-	mip_height: i32,
+	texture_count: i32,
+	scale_factor: f32,
 
 	panned,
 	toggled,
@@ -61,6 +59,14 @@ initMiniMap :: proc(using mm: ^MiniMap, tm: ^TileMap, origin_position: ^vec2) {
 	origin = origin_position;
 	screen_position = &screen_bounds.min;
 
+	size.tile.width = f32(textures[0].bitmaps[0].width);
+	size.tile.height = f32(textures[0].bitmaps[0].height);
+	size.tile_map.width = f32(tile_map.width);
+	size.tile_map.height = f32(tile_map.height);
+	
+	tile_size := i32(size.tile.width * size.tile.height);
+
+	mip_count = i32(len(textures[0].bitmaps));
 	is_visible = true;
 	
 	initAmountAndFactor(&zoom,   MINIMAP__MIN_ZOOM_FACTOR,   MINIMAP__MAX_ZOOM_FACTOR, 4);
@@ -68,25 +74,34 @@ initMiniMap :: proc(using mm: ^MiniMap, tm: ^TileMap, origin_position: ^vec2) {
 
 	center_color = RED;
 	ray_color = YELLOW;
+	ray_color.a = 64;
 	front_edge_color = WHITE;
 	back_edge_color = GREY;
 	vertex_color = GREEN;
 	tile_color = BLUE;
 
-	canvas_bits = minimap_canvas_buffer[0:MINIMAP__CANVAS_BITMAP_PIXEL_COUNT];
-	line_of_sight_canvas_bits = minimap_canvas_buffer[MINIMAP__CANVAS_BITMAP_PIXEL_COUNT:MINIMAP__CANVAS_BITMAP_PIXEL_COUNT*2];
-	walls_bits = minimap_textures_buffer[0:MINIMAP__TILES_BITMAP_PIXEL_COUNT];
-	floor_bits = minimap_textures_buffer[MINIMAP__TILES_BITMAP_PIXEL_COUNT:MINIMAP__TILES_BITMAP_PIXEL_COUNT*2];
-	ceiling_bits = minimap_textures_buffer[MINIMAP__TILES_BITMAP_PIXEL_COUNT*2:MINIMAP__TILES_BITMAP_PIXEL_COUNT*3];
+
+	texture_count = i32(len(textures));
+	texture_pixels_count := texture_count * tile_size;
+
+	// for scaled_texture, t in &scaled_textures do 
+	// 	initGrid(&scaled_texture, i32(size.tile.width), i32(size.tile.height), all_scaled_textures_pixels[i32(t)*tile_size:(i32(t)+1)*tile_size]);
+
+	walls_pixels   := all_minimap_bitmap_pixels[MINIMAP__TILES_BITMAP_PIXEL_COUNT*0:MINIMAP__TILES_BITMAP_PIXEL_COUNT*1];
+	floor_pixels   := all_minimap_bitmap_pixels[MINIMAP__TILES_BITMAP_PIXEL_COUNT*1:MINIMAP__TILES_BITMAP_PIXEL_COUNT*2];
+	ceiling_pixels := all_minimap_bitmap_pixels[MINIMAP__TILES_BITMAP_PIXEL_COUNT*2:MINIMAP__TILES_BITMAP_PIXEL_COUNT*3];
+	view_pixels    := all_minimap_bitmap_pixels[MINIMAP__TILES_BITMAP_PIXEL_COUNT*3:MINIMAP__TILES_BITMAP_PIXEL_COUNT*4];
+
+	initGrid(&canvas, MINIMAP__MAX_SIZE, MINIMAP__MAX_SIZE, canvas_pixels[:]);
+	initGrid(&view,   MINIMAP__MAX_SIZE, MINIMAP__MAX_SIZE, view_pixels);
 	
-	initBitmap(&canvas,               MINIMAP__MAX_SIZE, MINIMAP__MAX_SIZE, canvas_bits);
-	initBitmap(&line_of_sight_canvas, MINIMAP__MAX_SIZE, MINIMAP__MAX_SIZE, line_of_sight_canvas_bits);
-	initBitmap(&walls  , MINIMAP__TILES_BITMAP_WIDTH, MINIMAP__TILES_BITMAP_HEIGHT, walls_bits);
-	initBitmap(&floor  , MINIMAP__TILES_BITMAP_WIDTH, MINIMAP__TILES_BITMAP_HEIGHT, floor_bits);
-	initBitmap(&ceiling, MINIMAP__TILES_BITMAP_WIDTH, MINIMAP__TILES_BITMAP_HEIGHT, ceiling_bits);	
-	
+	initGrid(&walls  , MINIMAP__TILES_BITMAP_WIDTH, MINIMAP__TILES_BITMAP_HEIGHT, walls_pixels);
+	initGrid(&floor  , MINIMAP__TILES_BITMAP_WIDTH, MINIMAP__TILES_BITMAP_HEIGHT, floor_pixels);
+	initGrid(&ceiling, MINIMAP__TILES_BITMAP_WIDTH, MINIMAP__TILES_BITMAP_HEIGHT, ceiling_pixels);	
+
 	clearBitmap(&canvas);
-	clearBitmap(&line_of_sight_canvas, true);
+	clearBitmap(&view, true);
+
 	clearBitmap(&walls);
 	clearBitmap(&floor);
 	clearBitmap(&ceiling);
@@ -112,8 +127,10 @@ resizeMiniMapByMouseWheel :: inline proc(using mm: ^MiniMap) {
 }
 
 resizeMiniMap :: inline proc(using mm: ^MiniMap, new_size: i32) {
-	size := clamp(new_size, MINIMAP__MIN_SIZE, MINIMAP__MAX_SIZE);
-	initBitmap(&canvas, size, size, canvas_bits);
+	s := clamp(new_size, MINIMAP__MIN_SIZE, MINIMAP__MAX_SIZE);
+	resizeGrid(&canvas, s, s);
+	resizeGrid(&view, s, s);
+	
 	resetMiniMapSize(mm);
 	screen_bounds.max.x = screen_bounds.min.x + canvas.width;
 	screen_bounds.max.y = screen_bounds.min.y + canvas.height;
@@ -127,31 +144,36 @@ resetMiniMapSize :: proc(using mm: ^MiniMap) {
 	offset = center + pan;
 	top_left = offset - origin^ * scale_factor;
 
-	pixel_size := scale_factor / TEXTURE_WIDTH;
-	new_width := i32(f32(map_textures[0].walls.width) * pixel_size); 
-	new_height := i32(f32(map_textures[0].walls.height) * pixel_size);
+	size.pixel.width = scale_factor / size.tile.width;
+	size.pixel.height = scale_factor / size.tile.height;
+	size.scaled_tile.width  = size.tile.width * size.pixel.width;
+	size.scaled_tile.height = size.tile.height * size.pixel.height;
+	size.scaled.width  = size.scaled_tile.width * size.tile_map.width;
+	size.scaled.height = size.scaled_tile.width * size.tile_map.height;
 
-	resizeBitmap(&walls,   new_width, new_height);
-	resizeBitmap(&floor,   new_width, new_height);
-	resizeBitmap(&ceiling, new_width, new_height);
-
-	clearBitmap(&walls);
-	clearBitmap(&floor);
-	clearBitmap(&ceiling);
+	w := i32(size.scaled.width);
+	h := i32(size.scaled.height);
+	resizeGrid(&walls,   w, h);
+	resizeGrid(&floor,   w, h);
+	resizeGrid(&ceiling, w, h);
+	resizeGrid(&view,    w, h);
 
 	mip_level = 0;
-	mip_width = TEXTURE_WIDTH;
-	mip_height = TEXTURE_HEIGHT;
-	for pixel_size < 1 && mip_level < (MIP_COUNT - 1) {
-		pixel_size += pixel_size;
-		mip_level += 1;
-		mip_width >>= 1;
-		mip_height >>= 1;
-	}
+	mip_pixel_width: f32 = 1;
 
-	drawBitmapToScale(walls_mips[mip_level], &walls);
-	drawBitmapToScale(floor_mips[mip_level], &floor);
-	drawBitmapToScale(ceiling_mips[mip_level], &ceiling);
+	for mip_pixel_width > size.pixel.width && mip_level < (mip_count - 1) {
+		mip_pixel_width /= 2;
+		mip_level += 1;
+	}
+	// mip_level -= 1;
+
+	// for scaled_texture, t in &scaled_textures {
+	// 	resizeGrid(&scaled_texture, i32(size.scaled_tile.width), i32(size.scaled_tile.height));
+	// 	scaleTexture(textures[t].samples[mip_level], &scaled_texture);
+	// }
+
+	drawMiniMapTextures(mm);
+	drawMiniMapPlayerView(mm);
 }
 
 panMiniMap :: inline proc(using mm: ^MiniMap) {
@@ -170,49 +192,129 @@ panMiniMap :: inline proc(using mm: ^MiniMap) {
     mouse_moved = false;
 }
 
-drawMiniMap :: inline proc(using mm: ^MiniMap) {
-	clearBitmap(&canvas, true);
-
-	drawBitmap(&floor, &canvas, i32(top_left.x), i32(top_left.y));
-	drawBitmap(&walls, &canvas, i32(top_left.x), i32(top_left.y));
-	// for pixel in &canvas.all_pixels do pixel.opacity = 254;
-
-	// for row, y in &tile_map.tiles do
-	// 	for tile, x in &row {
-	// 		using tile.minimap_space;
-	// 		if x_range.min >= bitmap.width ||
-	// 		   y_range.min >= bitmap.height ||
-	// 		   x_range.max < 0 ||
-	// 		   y_range.max < 0 do
-	// 		   continue;
-
-	// 		texture = tile.is_full ? &textures[tile.texture_id] : floor_texture;
-
-	// 		start_y := max(y_range.min, 0);
-	// 		end_y   := min(y_range.max, bitmap.height);
-	// 		pixel_offset = bitmap.width * start_y + x_range.min;
-	// 		for y in y_range.min..<y_range.max {
-	// 			if !(y < 0 || y >= bitmap.height) do 
-	// 				for x in x_range.min..<x_range.max do
-	// 					if !(x < 0 || x >= bitmap.width || (pixel_offset + x) < 0) do
-	// 						sampleBitmap(texture, 0.5, 0.5, &all_pixels[pixel_offset + x]); 
-
-	// 			pixel_offset += bitmap.width;
-	// 		}
-
-	// 		if tile.is_full do 
-	// 			fillRect(&bitmap,
-	// 					 bounds.min, 
-	// 				     bounds.max, 
-	// 				     tile_color);
-	// 	}
+drawMiniMapPlayerView :: proc(using mm: ^MiniMap) {
+	clearBitmap(&view, true);
 	
-	padding: vec2 = {1, 1};
+	pos := origin^ * scale_factor;
 
-	clearBitmap(&line_of_sight_canvas, true);
-	for ray in &rays do drawLine(&line_of_sight_canvas, offset, offset + (ray.hit.position - origin^)*scale_factor, ray_color, 64);
-	drawBitmap(&line_of_sight_canvas, &canvas);
-		
+	for ray in &rays do 
+		drawLine(&view, pos, pos + (ray.hit.position - origin^) * scale_factor, &ray_color);
+}
+
+drawMiniMapTextures :: proc(using mm: ^MiniMap) {
+	clearBitmap(&walls, true);
+	clearBitmap(&floor);
+	// clearBitmap(&ceiling);
+	// mip_level = 1;
+
+	
+  //   column_id,
+  //   current_row_is_full: u32;
+
+  //   texture_ids_row: ^[]TileTextureIDs;
+  //   tile_texture_ids: ^TileTextureIDs;
+
+  //   tile_width := i32(size.scaled_tile.width);
+  //   tile_height := i32(size.scaled_tile.height);
+    
+  //   pos: vec2i;
+
+  //   for y in 0..<tile_map.height {
+  //   	pos.x = 0;
+
+		// column_id = 1;
+		// current_row_is_full = tile_map.is_full[y]; 
+		// texture_ids_row = &tile_map.texture_ids.cells[y];
+
+		// for x in 0..<tile_map.width {
+		// 	tile_texture_ids = &texture_ids_row[x];
+
+  //       	if (current_row_is_full & column_id) != 0 do
+  //       		drawBitmap(&scaled_textures[tile_texture_ids.wall], &walls, pos.x, pos.y);
+
+  //       	drawBitmap(&scaled_textures[tile_texture_ids.floor], &floor, pos.x, pos.y);
+        	
+		// 	column_id <<= 1;
+		// 	pos.x += tile_width;			
+  //       }
+  //       pos.y += tile_height;
+  //   }
+    
+    tile_index: vec2i;
+    column_id: u32 = 1;
+	
+	texture_ids_row := &tile_map.texture_ids.cells[0];
+	tile_texture_ids := texture_ids_row[0];
+
+	current_row_is_full := tile_map.is_full[0];
+	current_tile_is_full: bool = true;
+
+	current_wall_texture := textures[tile_texture_ids.wall].samples[mip_level];
+	current_floor_texture:= textures[tile_texture_ids.floor].samples[mip_level];
+	// current_ceiling_texture: ^Samples = textures[tile_texture_ids.ceiling].samples[mip_level];
+
+	u, v: f32;
+	u_step := 1 / size.scaled_tile.width;
+	v_step := 1 / size.scaled_tile.height;
+
+	wall_pixel_row: ^[]Pixel;
+    
+    for floor_pixel_row, y in &floor.cells {
+    	wall_pixel_row = &walls.cells[y];
+    
+    	for floor_pixel, x in &floor_pixel_row {
+    		sample(current_floor_texture, u, v, &floor_pixel);
+    		if current_tile_is_full do
+    			sample(current_wall_texture, u, v, &wall_pixel_row[x]);	
+
+    		u += u_step;
+    		if u >= 1 && i32(x) < (floor.width - 1) {
+	    		u -= 1;
+
+	    		tile_index.x += 1;
+	    		tile_texture_ids = texture_ids_row[tile_index.x];
+
+	    		column_id <<= 1;
+	    		current_tile_is_full = (current_row_is_full & column_id) != 0;
+				current_floor_texture = textures[tile_texture_ids.floor].samples[mip_level];
+	    		if current_tile_is_full do
+	    			current_wall_texture = textures[tile_texture_ids.wall].samples[mip_level];
+	    	}
+    	}
+
+    	tile_index.x = 0;
+    	u = 0;
+    	v += v_step;
+    	if v >= 1 && i32(y) < (floor.height - 1) {
+    		v -= 1;
+    		
+    		tile_index.y += 1;
+    		current_row_is_full = tile_map.is_full[tile_index.y];
+    		
+    		texture_ids_row = &tile_map.texture_ids.cells[tile_index.y];
+    	}
+
+    	tile_texture_ids = texture_ids_row[0];
+
+		column_id = 1;
+		current_tile_is_full = (current_row_is_full & column_id) != 0;			
+		current_floor_texture = textures[tile_texture_ids.floor].samples[mip_level];
+		if current_tile_is_full do
+			current_wall_texture = textures[tile_texture_ids.wall].samples[mip_level];
+    }
+}
+
+drawMiniMap :: inline proc(using mm: ^MiniMap) {
+	clearBitmap(&canvas);
+
+	x := i32(top_left.x);
+	y := i32(top_left.y);
+	
+	drawBitmap(&floor, &canvas, x, y);
+	drawBitmap(&walls, &canvas, x, y);
+	drawBitmap(&view,  &canvas, x, y);
+	
+	padding: vec2 = {1, 1};		
 	// if is_debug_visible do
 	// 	for edge in &tile_map.edges {
 	// 		using edge.minimap;
@@ -220,5 +322,5 @@ drawMiniMap :: inline proc(using mm: ^MiniMap) {
 	// 		fillRect(&bitmap, from^ - padding, from^ + padding, vertex_color);
 	// 		fillRect(&bitmap, to^   - padding, to^   + padding, vertex_color);
 	// 	}
-	fillCircle(&canvas, offset, max(scale_factor * body_radius, 1), center_color);
+	fillCircle(&canvas, offset, max(scale_factor * body_radius, 1), &center_color);
 }

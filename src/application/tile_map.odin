@@ -15,15 +15,11 @@ Tile :: struct {
 
 	bounds: Bounds2Di,
 	
-	is_full,
 	has_left_edge,
 	has_right_edge,
 	has_top_edge,
-	has_bottom_edge: bool,
-	
-	texture_id: u8
+	has_bottom_edge: bool
 }
-TileRow :: []Tile;
 
 TileEdge :: struct { 
 	local: struct {
@@ -46,16 +42,22 @@ TileEdge :: struct {
 	is_facing_forward: bool
 }
 
+TileTextureIDs :: struct { floor, ceiling, wall, overlay: u8}
+
 TileMap :: struct {
-	using size: Size2Di,
-	tiles: []TileRow,
+	using tiles: Grid(Tile),
+	texture_ids: Grid(TileTextureIDs),
+
 	edges: []TileEdge,
 	edge_count,
 	vertex_count: i32,
 	vertices: []vec2i,
 	vertices_in_local_space: []vec2,
 
-	all_rows: [MAX_TILE_MAP_HEIGHT]TileRow,
+	is_full: [MAX_TILE_MAP_HEIGHT]u32,
+	
+	all_texture_ids: [MAX_TILE_MAP_SIZE]TileTextureIDs,
+	all_rows: [MAX_TILE_MAP_HEIGHT][]Tile,
 	all_tiles: [MAX_TILE_MAP_SIZE]Tile,
 	all_edges: [MAX_TILE_MAP_EDGES]TileEdge,
 	all_vertices: [MAX_TILE_MAP_VERTICES]vec2i,
@@ -63,8 +65,6 @@ TileMap :: struct {
 }
 
 initTile :: inline proc(using t: ^Tile) {
-	is_full = false;
-	
 	has_left_edge = false;
 	has_right_edge = false;
 	has_top_edge = false;
@@ -74,8 +74,6 @@ initTile :: inline proc(using t: ^Tile) {
 	bottom_edge = nil;
 	left_edge = nil;
 	right_edge = nil;
-
-	texture_id = 0;
 
 	bounds.min.x = 0;
 	bounds.min.y = 0;
@@ -115,40 +113,46 @@ initTileMap :: proc(using tm: ^TileMap, Width: i32 = MAX_TILE_MAP_WIDTH, Height:
 	vertices_in_local_space = all_vertices_in_local_space[:];
 
 	for tile in &all_tiles do initTile(&tile);
-	
-	start: i32;
-	end := width;
-
-	for y in 0..<height {
-		all_rows[y] = all_tiles[start:end];
-		start += width;
-		end   += width;
-	}
-
-	tiles = all_rows[:height];
+	initGrid(&tiles, width, height, all_tiles[:]);
+	initGrid(&texture_ids, width, height, all_texture_ids[:]);
 }
 
 NUMBER_ASCII_OFFSET :: 48;
 EMPTY_TILE_CHARACTER :: u8('_');
 
-readTileMapFromASCIIgrid :: proc(using tm: ^TileMap, ascii_grid: ^string) {
-	character := EMPTY_TILE_CHARACTER;
-    offset: u32 = 1;
+readTileMap :: proc(using tm: ^TileMap, wall_texture_ids, floor_texture_ids, ceiling_texture_ids: ^string) {
+	offset: u32 = 1;
     current_bounds: Bounds2Di;
+    
     using current_bounds;
     bottom = 1;
     left = 1;
 
-    for row, y in &tiles {
-        for tile, x in &row {
-        	character = ascii_grid[offset];
-        	
-        	initTile(&tile);
-        	using tile;
-        	bounds = current_bounds;
-        	is_full = character != EMPTY_TILE_CHARACTER;
-        	texture_id = is_full ? character - NUMBER_ASCII_OFFSET : 0;
+    culumn_id: u32;
+    current_row_texture_ids: ^[]TileTextureIDs;
+    current_tile_texture_ids: ^TileTextureIDs;
 
+    for row, y in &cells {
+    	is_full[y] = 0;
+    	culumn_id = 1;
+    	
+    	current_row_texture_ids = &texture_ids.cells[y];
+        for tile, x in &row {
+			current_tile_texture_ids = &current_row_texture_ids[x];
+			current_tile_texture_ids.wall = wall_texture_ids[offset];
+			current_tile_texture_ids.floor = floor_texture_ids[offset] - NUMBER_ASCII_OFFSET;
+			current_tile_texture_ids.ceiling = ceiling_texture_ids[offset] - NUMBER_ASCII_OFFSET;
+			
+        	initTile(&tile);
+        	
+        	tile.bounds = current_bounds;
+        	
+        	if current_tile_texture_ids.wall != EMPTY_TILE_CHARACTER {
+        		current_tile_texture_ids.wall -= NUMBER_ASCII_OFFSET;
+        		is_full[y] |= culumn_id;	
+        	}
+
+        	culumn_id <<= 1;
             left += 1;
 			right += 1;
             offset += 1;
@@ -183,32 +187,56 @@ moveTileMap :: proc(using tm: ^TileMap, origin: vec2) {
 }
 
 generateTileMapEdges :: proc(using tm: ^TileMap) {
-	TileCheck :: struct {exists: bool, tile: ^Tile, row: []Tile};
+	TileCheck :: struct {exists: bool, tile: ^Tile, row: ^[]Tile};
 	above, below, left, right: TileCheck;
 	position: vec2i; 
 	vertex_id, edge_id: u16;
 
-	for row, y in &tiles {
-		above.exists = y > 0;
-		below.exists = i32(y) < height - 1;
+    current_culumn_id,
+    left_column_id,
+    right_column_id,
+    
+    current_row_is_full,
+    row_above_is_full,
+    row_below_is_full: u32;
 
-		if above.exists do above.row = tiles[y - 1];
-		if below.exists do below.row = tiles[y + 1];
+	for row, y in &cells {
+		current_row_is_full = is_full[y];
 
+		if y > 0 {
+			above.exists = true;
+			above.row = &cells[y - 1];
+			row_above_is_full = is_full[y - 1]; 
+		} else do above.exists = false;
+
+		if i32(y) < (height - 1) {
+			below.exists = true;
+			below.row = &cells[y + 1];
+			row_below_is_full = is_full[y + 1];
+		} else do below.exists = false;
+
+		current_culumn_id = 1;
         for current_tile, x in &row {
-        	left.exists  = x > 0;
-        	right.exists = i32(x) < width - 1;
+        	if x > 0 {
+        		left.exists = true;
+        		left.tile  = &row[x - 1];
+        		left_column_id = current_culumn_id >> 1;
+        	} else do left.exists = false;
 
-        	if left.exists  do left.tile  = &row[x - 1];
-        	if right.exists do right.tile = &row[x + 1]; 
+        	if i32(x) < (width - 1) { 
+        		right.exists = true;
+        		right.tile = &row[x + 1];
+        		right_column_id = current_culumn_id << 1;
+        	} else do right.exists = false;
+
         	if above.exists do above.tile = &above.row[x]; 
         	if below.exists do below.tile = &below.row[x];
 
-        	if current_tile.is_full {
-				current_tile.has_left_edge   = left.exists  && !left.tile.is_full;
-	        	current_tile.has_right_edge  = right.exists && !right.tile.is_full;
-	        	current_tile.has_top_edge    = above.exists && !above.tile.is_full;
-	        	current_tile.has_bottom_edge = below.exists && !below.tile.is_full;
+        	if (current_row_is_full & current_culumn_id) != 0 {
+				current_tile.has_left_edge   = left.exists  && ((current_row_is_full & left_column_id) == 0);
+	        	current_tile.has_right_edge  = right.exists && ((current_row_is_full & right_column_id) == 0);
+	        	current_tile.has_top_edge    = above.exists && ((row_above_is_full & current_culumn_id) == 0);
+	        	current_tile.has_bottom_edge = below.exists && ((row_below_is_full & current_culumn_id) == 0);
 
 	        	if current_tile.has_left_edge { // Create/extend left edge:
 		        	if above.exists && above.tile.has_left_edge { // Tile above has a left edge, extend it:
@@ -224,10 +252,9 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 		        		from = nil;
 		        		local.from = nil;
-		        		if left.exists && above.exists {
+		        		if left.exists && above.exists && ((row_above_is_full & left_column_id) != 0) {
 		        			top_left := &above.row[x-1];
-		        			if top_left.is_full && 
-		        			   top_left.has_right_edge && 
+		        			if top_left.has_right_edge && 
 		        			   top_left.has_bottom_edge {
 		        				from = top_left.bottom_edge.to;
 		        				local.from = top_left.bottom_edge.local.to;
@@ -268,10 +295,9 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 						from = nil;
 		        		local.from = nil;
-		        		if right.exists && above.exists {
+		        		if right.exists && above.exists && ((row_above_is_full & right_column_id) != 0) {
 		        			top_right := &above.row[x+1];
-		        			if top_right.is_full &&
-		        			   top_right.has_left_edge &&
+		        			if top_right.has_left_edge &&
 		        			   top_right.has_bottom_edge {
 		        				from = top_right.bottom_edge.from;
 		        				local.from = top_right.bottom_edge.local.from;
@@ -314,10 +340,9 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 						from = nil;
 		        		local.from = nil;
-		        		if left.exists && above.exists {
+		        		if left.exists && above.exists && ((row_above_is_full & left_column_id) != 0) {
 		        			top_left := &above.row[x-1];
-		        			if top_left.is_full && 
-		        			   top_left.has_right_edge && 
+		        			if top_left.has_right_edge && 
 		        			   top_left.has_bottom_edge {
 		        				from = top_left.bottom_edge.to;
 		        				local.from = top_left.bottom_edge.local.to;
@@ -326,10 +351,9 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 
 						to = nil;
 		        		local.to = nil;
-		        		if right.exists && above.exists {
+		        		if right.exists && above.exists && ((row_above_is_full & right_column_id) != 0) {
 		        			top_right := &above.row[x+1];
-		        			if top_right.is_full &&
-		        			   top_right.has_left_edge &&
+		        			if top_right.has_left_edge &&
 		        			   top_right.has_bottom_edge {
 		        				to = top_right.bottom_edge.from;
 		        				local.to = top_right.bottom_edge.local.from;
@@ -403,6 +427,7 @@ generateTileMapEdges :: proc(using tm: ^TileMap) {
 	        current_tile.bounds.bottom = position.y + 1;
 
 			position.x += 1;
+			current_culumn_id <<= 1;
         }
 
         position.x  = 0;

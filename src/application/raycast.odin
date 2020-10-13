@@ -1,11 +1,13 @@
 package application
 
 RayHit :: struct {
+    tile_coords: vec2i,
     position: vec2,
+
     distance,
     edge_fraction,
     tile_fraction: f32,
-    tile: ^Tile,
+    
     edge: ^TileEdge
 }
 Ray :: struct {     
@@ -27,11 +29,11 @@ Ray :: struct {
 all_rays: [FRAME_BUFFER__MAX_WIDTH]Ray;
 rays: []Ray;
 
-VerticalHitInfo :: struct {
+VerticalHitInfo :: struct #align(16) {
     distance, 
     dim_factor,
     mip_factor: f32,
-    mip_level: i32
+    mip_level: u8
 }
 all_vertical_hit_infos: [FRAME_BUFFER__MAX_HEIGHT/2]VerticalHitInfo;
 vertical_hit_infos: []VerticalHitInfo;
@@ -107,7 +109,7 @@ generateRays :: proc() {
     num_vertical_hit_infos := len(vertical_hit_infos); 
 
     vertical_hit_info: ^VerticalHitInfo;
-    current_mip_level: f32 = MIP_COUNT;  
+    current_mip_level: f32 = f32(len(walls_map_texture.bitmaps));  
     current_mip_levelI: i32;
 
     for y in 1..num_vertical_hit_infos {
@@ -115,12 +117,12 @@ generateRays :: proc() {
         using vertical_hit_info;
         
         distance = 1 / (2 * f32(y));
-        dim_factor = 1 - distance * half_height * distance_factor + MIN_DIM_FACTOR;
+        dim_factor = 1 - distance * half_height * distance_factor * 2 + MIN_DIM_FACTOR;
         
         current_mip_level *= 0.975;
         current_mip_levelI = i32(current_mip_level);
         
-        mip_level = current_mip_levelI;
+        mip_level = u8(current_mip_levelI);
         mip_factor = current_mip_level - f32(current_mip_levelI);
     }
 
@@ -178,19 +180,16 @@ castRay :: proc(using ray: ^Ray, using tm: ^TileMap) {
     position += origin^;
     distance = sqrt(distance);
 
-    tile_index: vec2i = {
-        i32(position.x),
-        i32(position.y)
-    };
+    tile_coords.x = i32(position.x);
+    tile_coords.y = i32(position.y);
+
     if edge.is_vertical {
         edge_fraction = position.y - f32(edge.from.y);
-        if edge.is_facing_right do tile_index.x -= 1;
+        if edge.is_facing_right do tile_coords.x -= 1;
     } else {
         edge_fraction = position.x - f32(edge.from.x);
-        if edge.is_facing_down do tile_index.y -= 1;
+        if edge.is_facing_down do tile_coords.y -= 1;
     }
-
-    tile = &tile_map.tiles[tile_index.y][tile_index.x];
     tile_fraction = edge_fraction - f32(i32(edge_fraction));
 }
 
@@ -210,56 +209,57 @@ castRays :: inline proc(using tm: ^TileMap) {
             if found {
                 tile_coords.x = i32(pos.x);
                 tile_coords.y = i32(pos.y);
-                // floor_texture   = &textures[tiles[tile_coords.y][tile_coords.x].texture_id];
-                // ceiling_texture = &textures[tiles[tile_coords.y][tile_coords.x].texture_id];
                 u = pos.x - f32(tile_coords.x);
                 v = pos.y - f32(tile_coords.y);
+
+                // u = pos.x / f32(width);
+                // v = pos.y / f32(height);
             }
         } 
     }
 }
 
-horizontal_hit, vertical_hit: RayHit;
+// horizontal_hit, vertical_hit: RayHit;
 
-castRayWolf3D :: proc(using ray: ^Ray) {    
-    horizontal_hit.position.y = origin.y;
-    if is_facing_down do horizontal_hit.position.y += 1;
-    horizontal_hit.position.x = origin.x + (horizontal_hit.position.y - origin.y) * run_over_rise;
-    inc_y: f32 = is_facing_up ? -1 : 1;
-    inc_x: f32 = run_over_rise * ((is_facing_left && rise_over_run > 0) != (is_facing_right && rise_over_run < 0) ? -1 : 1);
-    findHit(&horizontal_hit, inc_x, inc_y, false, is_facing_up);
+// castRayWolf3D :: proc(using ray: ^Ray) {    
+//     horizontal_hit.position.y = origin.y;
+//     if is_facing_down do horizontal_hit.position.y += 1;
+//     horizontal_hit.position.x = origin.x + (horizontal_hit.position.y - origin.y) * run_over_rise;
+//     inc_y: f32 = is_facing_up ? -1 : 1;
+//     inc_x: f32 = run_over_rise * ((is_facing_left && rise_over_run > 0) != (is_facing_right && rise_over_run < 0) ? -1 : 1);
+//     findHit(&horizontal_hit, inc_x, inc_y, false, is_facing_up);
 
-    vertical_hit.position.x = origin.x;
-    if is_facing_right do vertical_hit.position.x += 1;
-    vertical_hit.position.y = origin.y + (vertical_hit.position.x - origin.x) * rise_over_run;
-    inc_x = is_facing_left ? -1 : 1;
-    inc_y = rise_over_run * ((is_facing_up && rise_over_run > 0) != (is_facing_down && rise_over_run < 0) ? -1 : 1);
-    findHit(&vertical_hit, inc_x, inc_y, is_facing_left, false);
+//     vertical_hit.position.x = origin.x;
+//     if is_facing_right do vertical_hit.position.x += 1;
+//     vertical_hit.position.y = origin.y + (vertical_hit.position.x - origin.x) * rise_over_run;
+//     inc_x = is_facing_left ? -1 : 1;
+//     inc_y = rise_over_run * ((is_facing_up && rise_over_run > 0) != (is_facing_down && rise_over_run < 0) ? -1 : 1);
+//     findHit(&vertical_hit, inc_x, inc_y, is_facing_left, false);
     
-    horizontal_hit.distance = squared_length(horizontal_hit.position - origin^);
-      vertical_hit.distance = squared_length(  vertical_hit.position - origin^);
-    hit = horizontal_hit.distance < vertical_hit.distance ? horizontal_hit : vertical_hit;
-    hit.distance = sqrt(hit.distance);
-}
+//     horizontal_hit.distance = squared_length(horizontal_hit.position - origin^);
+//       vertical_hit.distance = squared_length(  vertical_hit.position - origin^);
+//     hit = horizontal_hit.distance < vertical_hit.distance ? horizontal_hit : vertical_hit;
+//     hit.distance = sqrt(hit.distance);
+// }
 
-findHit :: proc(using hit: ^RayHit, inc_x, inc_y: f32, dec_x, dec_y: bool) {
-    x, y: i32;
-    found: bool;
-    end_x := tile_map.width  - 1;
-    end_y := tile_map.height - 1;
-    for !found {
-        x = i32(dec_x ? (position.x - 1) : position.x);
-        y = i32(dec_y ? (position.y - 1) : position.y);
+// findHit :: proc(using hit: ^RayHit, inc_x, inc_y: f32, dec_x, dec_y: bool) {
+//     x, y: i32;
+//     found: bool;
+//     end_x := tile_map.width  - 1;
+//     end_y := tile_map.height - 1;
+//     for !found {
+//         x = i32(dec_x ? (position.x - 1) : position.x);
+//         y = i32(dec_y ? (position.y - 1) : position.y);
 
-        if inRange(0, x, end_x) && 
-           inRange(0, y, end_y) {
-            tile = &tile_map.tiles[y][x];
-            if tile.is_full {
-                found = true;
-            } else {
-                position.x += inc_x;
-                position.y += inc_y;
-            }
-        } else do found = true;
-    }
-}
+//         if inRange(0, x, end_x) && 
+//            inRange(0, y, end_y) {
+//             tile = &tile_map.tiles[y][x];
+//             if tile.is_full {
+//                 found = true;
+//             } else {
+//                 position.x += inc_x;
+//                 position.y += inc_y;
+//             }
+//         } else do found = true;
+//     }
+// }

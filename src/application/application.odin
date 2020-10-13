@@ -12,7 +12,7 @@ print :: fmt.println;
 mini_map: MiniMap;
 tile_map: TileMap;
 
-TILE_MAP_ASCII_GRID := `
+WALLS := `
 22222222222111111111111111111111
 2_________2____________________1
 2__2___22_2____________________1
@@ -47,6 +47,76 @@ TILE_MAP_ASCII_GRID := `
 11111111111111111111111111111111
 `;
 
+FLOOR := `
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+77777777777777777777777777777777
+`;
+
+CEILING := `
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+33333333333333333333333333333333
+`;
+
 SPEED :: 240;
 MOVEMENT_SPEED :: 0.04;
 TURNING_SPEED :: 0.01;
@@ -59,15 +129,17 @@ class_name :: "Application";
 camera: Camera2D;
 camera_controller: CameraController2D;
 
+next_pos_f: f32;
+next_pos_i: i32;
 body_radius: f32 = 0.3;
 next_tile: ^Tile;
 tile_map_changed: bool;
 
 frame_buffer_bits: [FRAME_BUFFER__MAX_SIZE]u32;
-frame_buffer: Bitmap;
+frame_buffer: FrameBuffer;
 
 resize :: proc(new_width, new_height: i32) {
-	initBitmap(&frame_buffer, new_width, new_height, frame_buffer_bits[:]);
+	initGrid(&frame_buffer, new_width, new_height, transmute([]FrameBufferPixel)(frame_buffer_bits[:]));
 	
 	onResize();
 	update();
@@ -94,7 +166,7 @@ update :: proc() {
 
 	if mouse_moved {
 		if mouse_is_captured do onMouseMoved(&camera_controller);
-		else if !mouse_is_captured && middle_mouse_button.is_pressed && mouseOnMiniMap() {
+		else if middle_mouse_button.is_pressed {
 			if ctrl_is_pressed {
 				mini_map.screen_bounds.min += mouse_pos_diff;
 				mini_map.screen_bounds.max += mouse_pos_diff;
@@ -108,19 +180,27 @@ update :: proc() {
 	onUpdate2D(&camera_controller);
 	if moved { // Detect collisions:
 		if movement.x > 0 {
-			next_tile = &tile_map.tiles[i32(position.y)][i32(position.x + body_radius)];
-			if next_tile.is_full do position.x = f32(next_tile.bounds.left) - body_radius;
+			next_pos_f = position.x + body_radius;
+			next_pos_i = i32(next_pos_f);
+			if (tile_map.is_full[u8(position.y)] & (1 << u32(next_pos_i))) != 0 do 
+				position.x = f32(next_pos_i) - body_radius;
 		} else if movement.x < 0 {
-			next_tile = &tile_map.tiles[i32(position.y)][i32(position.x - body_radius)];
-			if next_tile.is_full do position.x = f32(next_tile.bounds.right) + body_radius;
+			next_pos_f = position.x - body_radius;
+			next_pos_i = i32(next_pos_f);
+			if (tile_map.is_full[u8(position.y)] & (1 << u32(next_pos_i))) != 0 do 
+				position.x = f32(next_pos_i) + 1 + body_radius;
 		}
 		
 		if movement.y < 0 {
-			next_tile = &tile_map.tiles[i32(position.y - body_radius)][i32(position.x)];
-			if next_tile.is_full do position.y = f32(next_tile.bounds.bottom) + body_radius;
+			next_pos_f = position.y - body_radius;
+			next_pos_i = i32(next_pos_f);
+			if (tile_map.is_full[next_pos_i] & (1 << u8(position.x))) != 0 do 
+				position.y = f32(next_pos_i) + 1 + body_radius;
 		} else if movement.y > 0 {
-			next_tile = &tile_map.tiles[i32(position.y + body_radius)][i32(position.x)];
-			if next_tile.is_full do position.y = f32(next_tile.bounds.top) - body_radius;
+			next_pos_f = position.y + body_radius;
+			next_pos_i = i32(next_pos_f);
+			if (tile_map.is_full[next_pos_i] & (1 << u8(position.x))) != 0 do 
+				position.y = f32(next_pos_i) - body_radius;
 		}
 
 		movement = position - old_position;
@@ -140,7 +220,12 @@ update :: proc() {
 			tile_coords = {i32(tile_pos.x), i32(tile_pos.y)};
 			if !(tile_coords.x == i32(position.x) && 
 			     tile_coords.y == i32(position.y)) {
-				tile_map.tiles[tile_coords.y][tile_coords.x].is_full = left_mouse_button.is_pressed;
+				if left_mouse_button.is_pressed {
+					tile_map.texture_ids.cells[tile_coords.y][tile_coords.x].wall = 0;
+					tile_map.is_full[tile_coords.y] |= (1 << u16(tile_coords.x));
+				} else do 
+					tile_map.is_full[tile_coords.y] &= ~(1 << u16(tile_coords.x));
+
 				tile_map_changed = true;
 			}
 		}
@@ -148,8 +233,9 @@ update :: proc() {
 
 	if tile_map_changed {
 		generateTileMapEdges(&tile_map);
-		drawWallTilesTexture(&tile_map);
-		drawBitmapToScale(&map_textures[0].walls, &mini_map.tile_map_textures.walls);
+		drawMiniMapTextures(&mini_map);
+		// drawMapTextures(&tile_map, true);
+		// scaleTexture(walls_map_texture.samples[0], &mini_map.walls);
 	}
 	if tile_map_changed || moved {
 		moveTileMap(&tile_map, position);
@@ -166,6 +252,8 @@ update :: proc() {
 	}
 	if turned || zoomed do generateRays();
 	if tile_map_changed || moved || turned || zoomed do castRays(&tile_map);
+	if tile_map_changed || moved || turned || zoomed ||
+	   mini_map.toggled do drawMiniMapPlayerView(&mini_map);
 	if tile_map_changed || moved || turned || zoomed || 
 	   mini_map.resize.changed || 
 	   mini_map.zoom.changed || 
@@ -184,11 +272,13 @@ render :: proc() {
 	// clearBitmap(&bitmap);
 	// for pixel in &all_pixels do pixel.color = BLACK;
 	// fillBounds2Di(&bitmap, &bounds, BLACK, 0);
+	// drawBitmap(&walls_map_texture.bitmaps[], &frame_buffer, 0, 0);
+		
 	drawWalls(&camera);
 	if mini_map.is_visible {
 		// drawBitmap(&mini_map.floor, &frame_buffer, mini_map.screen_position.x, mini_map.screen_position.y);
 		drawBitmap(&mini_map.canvas, &frame_buffer, mini_map.screen_position.x, mini_map.screen_position.y);
-		drawRect(&frame_buffer, &mini_map.screen_bounds, WHITE);
+		drawRect(&frame_buffer, &mini_map.screen_bounds, &WHITE);
 	}
 
 	ticks_after = getTicks();
@@ -222,27 +312,23 @@ initApplication :: proc(platformGetTicks: GetTicks, platformTicksPerSecond: u64)
 	toggle1 = true;
 	initTimers(platformGetTicks, platformTicksPerSecond);
 
-	initBitmap(&frame_buffer, FRAME_BUFFER__MAX_WIDTH, FRAME_BUFFER__MAX_HEIGHT, frame_buffer_bits[:]);
+	initGrid(&frame_buffer, FRAME_BUFFER__MAX_WIDTH, FRAME_BUFFER__MAX_HEIGHT, transmute([]FrameBufferPixel)(frame_buffer_bits[:]));
 	
 	initCamera(&camera);
 	initCameraController(&camera_controller.controller);
 	camera_controller.camera = &camera;
 	
-	initTextures();
+	initRender();
 
 	initTileMap(&tile_map);
-	readTileMapFromASCIIgrid(&tile_map, &TILE_MAP_ASCII_GRID);
+	readTileMap(&tile_map, &WALLS, &FLOOR, &CEILING);
 	generateTileMapEdges(&tile_map);
 	moveTileMap(&tile_map, position);
 	
-    drawFloorAndCeilingTilesTexture(&tile_map);
-
 	initRayCast();
-	drawWallTilesTexture(&tile_map);
+    drawMapTextures(&tile_map, true, true, true);
+
 	initMiniMap(&mini_map, &tile_map, &position);
 	drawMiniMap(&mini_map);
-	
-	// initMipMap(&mipmap, ceiling_texture);
-
 	UPDATE_INTERVAL = ticks_per_second / TARGET_FPS;
 }

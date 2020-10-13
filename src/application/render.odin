@@ -1,36 +1,18 @@
 package application
 
-TEXTURE_COUNT :: 8;
-TEXTURE_WIDTH :: 64;
-TEXTURE_HEIGHT :: 64;
-TEXTURE_SIZE :: TEXTURE_WIDTH * TEXTURE_HEIGHT;
-MIPPED_TEXTURE_SIZE :: (TEXTURE_WIDTH + TEXTURE_WIDTH/2) * (TEXTURE_HEIGHT + TEXTURE_HEIGHT/2);
+FLOOR_TEXTURE_ID :: 7;
+CEILING_TEXTURE_ID :: 3;
 
 MIN_DIM_FACTOR :: 0.1;
 MAX_DIM_FACTOR :: 2;
 DIM_FACTOR_RANGE :: MAX_DIM_FACTOR - MIN_DIM_FACTOR;
 
 MAX_COLOR_VALUE :: 0xFF;
-MIP_COUNT :: 7;
+// TEXTURE_COUNT :: 8;
+TEXTURE_WIDTH :: 64;
+TEXTURE_HEIGHT :: 64;
 
-FLOOR_TEXTURE_ID :: 7;
-CEILING_TEXTURE_ID :: 3;
-
-CEILING_COLOR: Color = {
-    R = 44,
-    G = 44,
-    B = 44
-};
-FLOOR_COLOR: Color = {
-    R = 88,
-    G = 88,
-    B = 88
-};
-
-TileMapTexturesBitmaps :: struct { floor, ceiling, walls: Bitmap};
-TileMapTextures :: struct #raw_union { array: [3]Bitmap, using bitmaps: TileMapTexturesBitmaps};
-
-texture_files: [TEXTURE_COUNT][]u8= {
+texture_files: [][]u8 = {
 	#load("../../assets/bluestone.bmp"),
 	#load("../../assets/colorstone.bmp"),
 	#load("../../assets/eagle.bmp"),
@@ -41,152 +23,80 @@ texture_files: [TEXTURE_COUNT][]u8= {
 	#load("../../assets/wood.bmp")
 };
 
-textures_buffer: [TEXTURE_COUNT * MIPPED_TEXTURE_SIZE]u32;
-textures: [MIP_COUNT][TEXTURE_COUNT]Bitmap;
+texture_set,
+map_texture_set: TextureSet;
 
-blocked_textures_buffer: [TEXTURE_COUNT * MIPPED_TEXTURE_SIZE]PixelBlock;
-blocked_textures: [MIP_COUNT][TEXTURE_COUNT]BlockedBitmap;
+walls_map_texture,
+floor_map_texture,
+ceiling_map_texture: ^Texture;
 
-// float_textures_buffer: [TEXTURE_COUNT * MIPPED_TEXTURE_SIZE * 4]f32;
-// float_textures: [MIP_COUNT][TEXTURE_COUNT]FloatBitmap;
+textures: ^[]Texture;
 
-map_textures_buffer: [3 * MAX_TILE_MAP_SIZE * MIPPED_TEXTURE_SIZE]u32;
-map_textures: [MIP_COUNT]TileMapTextures;
-
-walls_mips,
-floor_mips,
-ceiling_mips: [MIP_COUNT]^Bitmap;
-
-blocked_walls_mips,
-blocked_floor_mips,
-blocked_ceiling_mips: [MIP_COUNT]^BlockedBitmap;
-
-initTextures :: proc() {
-	start  : i32;
-	end    : i32 = TEXTURE_SIZE;
-	size   : i32 = TEXTURE_SIZE;
-	width  : i32 = TEXTURE_WIDTH;
-	height : i32 = TEXTURE_HEIGHT;
-
-	texture_mips: [TEXTURE_COUNT][MIP_COUNT]^Bitmap;
-
-	for mip_level in 0..<MIP_COUNT {
-		for texture, texture_id in &textures[mip_level] {
-			texture_mips[texture_id][mip_level] = &texture;
-
-			if mip_level == 0 do
-				readBitmapFromFile(&texture, texture_files[texture_id], textures_buffer[start:end]);
-			else do
-				initBitmap(&texture, width, height, textures_buffer[start:end]);
-			
-			start += size;
-			end   += texture_id == (TEXTURE_COUNT - 1) ? size / 4 : size;
-		}
-
-		width /= 2;
-		height /= 2;
-		size /= 4;
-	}
-	for mips in &texture_mips do setMips(mips[:]);
-
-	width = TEXTURE_WIDTH + 1;
-	height = TEXTURE_HEIGHT + 1;
-	size = width * height;
-	start = 0;
-	end = size;
-	for mip_level in 0..<MIP_COUNT {
-		for texture, texture_id in &textures[mip_level] {
-			initBlockedBitmap(&blocked_textures[mip_level][texture_id], width, height, blocked_textures_buffer[start:end]);
-			setBlockedBitmap(&blocked_textures[mip_level][texture_id], &texture);
-	
-			start += size;
-			end   += texture_id == (TEXTURE_COUNT - 1) ? (
-				(((width  - 1) / 2) + 1) * 
-				(((height - 1) / 2) + 1)				
-			) : size;
-		}
-
-		width = ((width - 1) / 2) + 1;
-		height = ((height - 1) / 2) + 1;
-		size = width * height;
-	}
-
-	// size = TEXTURE_SIZE * 4;
-	// end = size;
-	// start = 0;
-	// width = TEXTURE_WIDTH;
-	// height = TEXTURE_HEIGHT;
-	// for mip_level in 0..<MIP_COUNT {
-	// 	for texture, texture_id in &float_textures[mip_level] {			
-	// 		initFloatBitmap(&texture, width, height, float_textures_buffer[start:end]);
-	// 		setFloatBitmap(&texture, &textures[mip_level][texture_id]);
-	// 		start += size;
-	// 		end   += texture_id == (TEXTURE_COUNT - 1) ? size / 4 : size;
-	// 	}
-
-	// 	width /= 2;
-	// 	height /= 2;
-	// 	size /= 4;
-	// }
-
-	width = MAX_TILE_MAP_WIDTH * TEXTURE_WIDTH;
-	height = MAX_TILE_MAP_HEIGHT * TEXTURE_HEIGHT;
-	size = width * height;
-	start = 0;
-	end = size;
-	
-	for bitmaps, mip_level in &map_textures {
-		for bitmap, texture_id in &bitmaps.array {
-			initBitmap(&bitmap, width, height, map_textures_buffer[start:end]);
-			
-			start += size;
-			end   += texture_id == 2 ? size / 4 : size;
-		}
-
-		walls_mips[mip_level] = &bitmaps.walls;
-		floor_mips[mip_level] = &bitmaps.floor;
-		ceiling_mips[mip_level] = &bitmaps.ceiling;
-
-		width /= 2;
-		height /= 2;
-		size /= 4;
-	}
-}
-
-drawWallTilesTexture :: proc(using tm: ^TileMap) {
-	for bitmap in &walls_mips do clearBitmap(bitmap, true);
+initRender :: proc() {
+	initTextureSet(&map_texture_set, 3, MAX_TILE_MAP_HEIGHT * TEXTURE_HEIGHT, MAX_TILE_MAP_WIDTH * TEXTURE_WIDTH);
+    loadTextureSet(&texture_set, &texture_files, TEXTURE_WIDTH, TEXTURE_HEIGHT);
     
-    for row in &tile_map.tiles do
-        for tile in &row do 
-        	if tile.is_full do
-        		for bitmap, mip_level in walls_mips do
-		            drawBitmap(&textures[mip_level][tile.texture_id],
-		            			bitmap, 
-		            			tile.bounds.min.x * textures[mip_level][tile.texture_id].width, 
-		            			tile.bounds.min.y * textures[mip_level][tile.texture_id].height);
+	walls_map_texture = &map_texture_set.textures[0];
+	floor_map_texture = &map_texture_set.textures[1];
+	ceiling_map_texture = &map_texture_set.textures[2];
+
+	textures = &texture_set.textures;
 }
 
-drawFloorAndCeilingTilesTexture :: proc(using tm: ^TileMap) {
-	for bitmap in &floor_mips do clearBitmap(bitmap);
-	for bitmap in &ceiling_mips do clearBitmap(bitmap);
-	
+drawMapTextures :: proc(using tm: ^TileMap, walls: bool = false, floor: bool = false, ceiling: bool = false) {
+	if walls do for bitmap in &walls_map_texture.bitmaps do clearBitmap(bitmap, true);
+	if floor do for bitmap in &floor_map_texture.bitmaps do clearBitmap(bitmap);
+	if ceiling do for bitmap in &ceiling_map_texture.bitmaps do clearBitmap(bitmap);
+
+    walls_bitmap := walls_map_texture.bitmaps[0];
+    floor_bitmap := floor_map_texture.bitmaps[0];
+    ceiling_bitmap := ceiling_map_texture.bitmaps[0];
+
+    tile_width  := textures[0].bitmaps[0].width;
+    tile_height := textures[0].bitmaps[0].height;
+
+    column_id,
+    current_row_is_full: u32;
+
+    texture_ids_row: ^[]TileTextureIDs;
+    tile_texture_ids: ^TileTextureIDs;
+
     pos: vec2i;
-    
-    for row in &tiles do
-        for tile in &row do
-			for mip_level in 0..<MIP_COUNT {
-				pos = tile.bounds.min * textures[mip_level][FLOOR_TEXTURE_ID].width;
-	            drawBitmap(&textures[mip_level][FLOOR_TEXTURE_ID],
-	            			floor_mips[mip_level], 
-	            			tile.bounds.min.x * textures[mip_level][FLOOR_TEXTURE_ID].width, 
-	            			tile.bounds.min.y * textures[mip_level][FLOOR_TEXTURE_ID].height);
-	            drawBitmap(&textures[mip_level][CEILING_TEXTURE_ID],
-	            			ceiling_mips[mip_level], 
-	            			tile.bounds.min.x * textures[mip_level][CEILING_TEXTURE_ID].width, 
-	            			tile.bounds.min.y * textures[mip_level][CEILING_TEXTURE_ID].height);
-			}
 
-	// printBitmap();		
+    for y in 0..<height {
+    	pos.x = 0;
+
+		column_id = 1;
+		current_row_is_full = is_full[y]; 
+		texture_ids_row = &texture_ids.cells[y];
+
+		for x in 0..<width {
+			tile_texture_ids = &texture_ids_row[x];
+
+        	if walls && (current_row_is_full & column_id) != 0 do
+        		drawBitmap(textures[tile_texture_ids.wall].bitmaps[0], walls_bitmap, pos.x, pos.y);
+
+        	if floor do drawBitmap(textures[tile_texture_ids.floor].bitmaps[0], floor_bitmap, pos.x, pos.y);
+        	if ceiling do drawBitmap(textures[tile_texture_ids.ceiling].bitmaps[0], ceiling_bitmap, pos.x, pos.y);
+
+			column_id <<= 1;
+			pos.x += tile_width;			
+        }
+        pos.y += tile_height;
+    }
+
+	if walls {
+		generateMipMaps(&walls_map_texture.bitmaps);
+    	generateTextureSamples(walls_map_texture);
+	};
+	if floor {
+		generateMipMaps(&floor_map_texture.bitmaps);
+    	generateTextureSamples(floor_map_texture);
+	};
+	if ceiling {
+		generateMipMaps(&ceiling_map_texture.bitmaps);
+    	generateTextureSamples(ceiling_map_texture);
+	};
 }
 
 drawWalls :: proc(using cam: ^Camera2D) {
@@ -202,37 +112,63 @@ drawWalls :: proc(using cam: ^Camera2D) {
     max_distance := half_width * focal_length;
 
     vertical_hit: ^VerticalHit;
-    texture, other_texture: ^BlockedBitmap;
     pixel: Pixel;
     float_pixel, other_float_pixel: vec4;
 
     floor_pixel_offset := size - width;
     ceiling_pixel_offset: i32;
 
-	mip_level: i32 = 0;
-    
+	mip_level: u8;
+	mip_count := u8(len(textures[0].samples));
+	last_mip := mip_count - 1;
+	initial_mip := f32(mip_count) * 0.9;
+	other_mip_level: u8 = 1;
+
+	// last_map_textue_mip := u8(len(floor_map_texture.samples) - 1);
+
 	current_mip_factor,
 	next_mip_factor: f32;
 
-    floor_texture,
-	ceiling_texture,
-    other_floor_texture,
-	other_ceiling_texture: ^BlockedBitmap;
+    wall_samples, 
+	other_wall_samples,
+    other_floor_samples,
+	other_ceiling_samples: ^Samples;
+	
+    tile_width  := textures[0].bitmaps[0].width;
+    tile_height := textures[0].bitmaps[0].height;
+
+    floor_samples   := &textures[7].samples;
+    ceiling_samples := &textures[3].samples;
+    other_floor, floor, 
+    other_ceiling, ceiling: ^Samples;
 
     for vertical_hit_row, y in &vertical_hits {
-    	mip_level = vertical_hit_infos[y].mip_level;
+    	// mip_level = min(vertical_hit_infos[y].mip_level, last_map_textue_mip);
+        mip_level = min(vertical_hit_infos[y].mip_level, last_mip);
+
     	current_mip_factor = vertical_hit_infos[y].mip_factor;
-    	next_mip_factor = 1 - current_mip_factor;
 
 		if toggle2 {		
-			floor_texture = &blocked_textures[max(mip_level-1, 0)][FLOOR_TEXTURE_ID];
-			ceiling_texture = &blocked_textures[max(mip_level-1, 0)][CEILING_TEXTURE_ID];
+            other_mip_level = mip_level == 0 ? 0 : max(mip_level - 1, 0);
+            next_mip_factor = 1 - current_mip_factor;
+			
+            floor = floor_samples[mip_level];
+            ceiling = ceiling_samples[mip_level];
+
+            other_floor = floor_samples[other_mip_level];
+            other_ceiling = ceiling_samples[other_mip_level];
+
+            // floor_samples = floor_map_texture.samples[mip_level];
+			// ceiling_samples = ceiling_map_texture.samples[mip_level];
 		
-			other_floor_texture = &blocked_textures[min(mip_level, MIP_COUNT - 1)][FLOOR_TEXTURE_ID];
-			other_ceiling_texture = &blocked_textures[min(mip_level, MIP_COUNT-1)][CEILING_TEXTURE_ID];
+			// other_floor_samples = floor_map_texture.samples[other_mip_level];
+			// other_ceiling_samples = ceiling_map_texture.samples[other_mip_level];
 		} else {
-			floor_texture = &blocked_textures[mip_level][FLOOR_TEXTURE_ID];
-			ceiling_texture = &blocked_textures[mip_level][CEILING_TEXTURE_ID];
+            floor = floor_samples[mip_level];
+            ceiling = ceiling_samples[mip_level];
+
+			// floor_samples = floor_map_texture.samples[mip_level];
+			// ceiling_samples = ceiling_map_texture.samples[mip_level];
 		}		
 		
         for vertical_hit, x in &vertical_hit_row {
@@ -240,42 +176,37 @@ drawWalls :: proc(using cam: ^Camera2D) {
 
             dim_factor = vertical_hit.info.dim_factor;
 
-            sampleBlockedBitmap(floor_texture, vertical_hit.u, vertical_hit.v, &float_pixel);
+            sample(floor, vertical_hit.u, vertical_hit.v, &float_pixel);
 
             if toggle2 {
-	            sampleBlockedBitmap(other_floor_texture, vertical_hit.u, vertical_hit.v, &other_float_pixel);
+	            sample(other_floor, vertical_hit.u, vertical_hit.v, &other_float_pixel);
 	            float_pixel = current_mip_factor*float_pixel + next_mip_factor*other_float_pixel;
             }
             float_pixel *= dim_factor;
-            pixel.R = u8(float_pixel.r);
-            pixel.G = u8(float_pixel.g);
-            pixel.B = u8(float_pixel.b);
-            all_pixels[floor_pixel_offset + i32(x)] = pixel;
+            for i in 0..3 do if float_pixel[i] < 0 do float_pixel[i] = 0;
+            setPixel(&_cells[floor_pixel_offset + i32(x)], &float_pixel);
 
-            sampleBlockedBitmap(ceiling_texture, vertical_hit.u, vertical_hit.v, &float_pixel);
+            sample(ceiling, vertical_hit.u, vertical_hit.v, &float_pixel);
             if toggle2 {
-            	sampleBlockedBitmap(other_ceiling_texture, vertical_hit.u, vertical_hit.v, &other_float_pixel);	
+            	sample(other_ceiling, vertical_hit.u, vertical_hit.v, &other_float_pixel);	
             	float_pixel = current_mip_factor*float_pixel + next_mip_factor*other_float_pixel;
             }
-            
             float_pixel *= dim_factor;
-            pixel.R = u8(float_pixel.r);
-            pixel.G = u8(float_pixel.g);
-            pixel.B = u8(float_pixel.b);
-            all_pixels[ceiling_pixel_offset + i32(x)] = pixel;
+            for i in 0..3 do if float_pixel[i] < 0 do float_pixel[i] = 0; 
+            setPixel(&_cells[ceiling_pixel_offset + i32(x)], &float_pixel);
         }
 
         floor_pixel_offset   -= width;
         ceiling_pixel_offset += width;
     }
 
+    texture_id: u8;
     texture_height_ratio,
-    current_mip_level: f32;  
+    current_mip_levelf: f32;  
     current_mip_levelI: i32;
 
     for ray, x in &rays {
         using ray;
-
 
         distance = dot((hit.position - position), forward_direction^);
         if distance < 0 do distance = -distance;
@@ -292,62 +223,146 @@ drawWalls :: proc(using cam: ^Camera2D) {
         u = hit.tile_fraction;
 
         texture_height_ratio = texel_height * TEXTURE_HEIGHT / 14;
-		current_mip_level = f32(MIP_COUNT) * 0.9;
-        for (current_mip_level / f32(MIP_COUNT)) > texture_height_ratio do current_mip_level *= 0.9;
-        current_mip_levelI = i32(current_mip_level);
-        current_mip_factor = current_mip_level - f32(current_mip_levelI);
+		current_mip_levelf = initial_mip;
+        for (current_mip_levelf / f32(mip_count)) > texture_height_ratio do current_mip_levelf *= 0.9;
+        current_mip_levelI = i32(current_mip_levelf);
+        current_mip_factor = current_mip_levelf - f32(current_mip_levelI);
         next_mip_factor = 1 - current_mip_factor;
-		mip_level = current_mip_levelI;
-		// print(current_mip_level, current_mip_factor, next_mip_factor);
+		mip_level = min(u8(current_mip_levelI), last_mip);
+    	other_mip_level = mip_level == 0 ? 0 : max(mip_level - 1, 0);
 
-		if toggle2 {	
-	        texture = &blocked_textures[max(mip_level-1, 0)][hit.tile.texture_id];
-	        other_texture = &blocked_textures[min(mip_level, MIP_COUNT-1)][hit.tile.texture_id];
-		} else do texture = &blocked_textures[mip_level][hit.tile.texture_id];
+    	texture_id = tile_map.texture_ids.cells[hit.tile_coords.y][hit.tile_coords.x].wall;
+	    wall_samples = textures[texture_id].samples[mip_level];
+		if toggle2 do other_wall_samples = textures[texture_id].samples[other_mip_level];
 
         pixel_offset = top * width + i32(x);
         for y in top..<bottom {            
-            sampleBlockedBitmap(texture, u, v, &float_pixel);
+            sample(wall_samples, u, v, &float_pixel);
             
             if toggle2 {
-	            sampleBlockedBitmap(other_texture, u, v, &other_float_pixel);
+	            sample(other_wall_samples, u, v, &other_float_pixel);
 	            float_pixel = current_mip_factor * float_pixel + next_mip_factor * other_float_pixel;
             }
             float_pixel *= dim_factor;
-            pixel.R = u8(float_pixel.r);
-            pixel.G = u8(float_pixel.g);
-            pixel.B = u8(float_pixel.b);
-            // pixel.color.R = u8(clamp(dim_factor * f32(pixel.color.R), 0, MAX_COLOR_VALUE));
-            // pixel.color.G = u8(clamp(dim_factor * f32(pixel.color.G), 0, MAX_COLOR_VALUE));
-            // pixel.color.B = u8(clamp(dim_factor * f32(pixel.color.B), 0, MAX_COLOR_VALUE));
+            for i in 0..3 do if float_pixel[i] < 0 do float_pixel[i] = 0;
+            setPixel(&_cells[pixel_offset], &float_pixel);
 
-            all_pixels[pixel_offset] = pixel;
-            
             pixel_offset += width;
             v += texel_height;
         }
     }
 }
 
-// MAX_TILES_TEXTURE_SIZE :: MAX_TILE_MAP_SIZE * TEXTURE_SIZE;
-// TileMapTexture :: struct {
-//     using bitmap: Bitmap,
-//     mipmap: MipMap,
-//     bits: ^[MAX_TILES_TEXTURE_SIZE]u32
-// };
-// initTileMapTexture :: proc(using tmt: ^TileMapTexture) {
-// 	bits := make_slice([]u32, MAX_TILES_TEXTURE_SIZE);
-//     initBitmap(&bitmap, 
-//         MAX_TILE_MAP_WIDTH  * TEXTURE_WIDTH, 
-//         MAX_TILE_MAP_HEIGHT * TEXTURE_HEIGHT, 
-//         bits^[:]
-//     );
-//     initMipMap(&mipmap, &bitmap);
-// }
-// initTextures :: proc() {	
-// 	MIP_COUNT = textures[0].mip_count;;
 
-//     initTileMapTexture(&wall_tiles_texture);
-//     initTileMapTexture(&floor_tiles_texture);
-//     initTileMapTexture(&ceiling_tiles_texture);
+// MIP_COUNT :: 7;
+// TEXTURE_COUNT :: 8;
+// TEXTURE_WIDTH :: 64;
+// TEXTURE_HEIGHT :: 64;
+// TEXTURE_SIZE :: TEXTURE_WIDTH * TEXTURE_HEIGHT;
+// // MIPPED_TEXTURE_SIZE :: (TEXTURE_WIDTH + TEXTURE_WIDTH/2) * (TEXTURE_HEIGHT + TEXTURE_HEIGHT/2);
+// // SAMPLES_BUFFER_SIZE :: TEXTURE_COUNT * MIPPED_TEXTURE_SIZE;
+
+
+// _walls_texture_set: TextureSet(len(texture_files), TEXTURE_HEIGHT, TEXTURE_WIDTH, MIP_COUNT);
+// _maps_texture_set: TextureSet(2, MAX_TILE_MAP_SIZE * TEXTURE_HEIGHT, MAX_TILE_MAP_SIZE * TEXTURE_WIDTH, MIP_COUNT);
+
+// // all_texture_samples_buffer: [SAMPLES_BUFFER_SIZE]Sample;
+// // all_texture_samples: [MIP_COUNT][TEXTURE_COUNT]Samples;
+// // all_textures: [TEXTURE_COUNT]Texture;
+
+// MapTextures :: struct (TextureType: typeid) #raw_union { 
+// 	using textures: struct { 
+// 		floor, 
+// 		ceiling, 
+// 		walls: TextureType
+// 	},
+// 	array: [3]TextureType
+// };
+
+
+// map_textures_buffer: [3 * MAX_TILE_MAP_SIZE * MIPPED_TEXTURE_SIZE]Texel;
+// map_textures: [MIP_COUNT]TileMapTextures(Texture);
+
+// map_samples_buffer: [3 * MAX_TILE_MAP_SIZE * MIPPED_TEXTURE_SIZE]Sample;
+// map_samples: [MIP_COUNT]TileMapTextures(Samples);
+
+// walls_mips,
+// floor_mips,
+// ceiling_mips: [MIP_COUNT]^Texture;
+
+// initTextures :: proc() {
+// 	initMipMap();
+// 	initTextureSet(&texture_set);
+
+// 	start  : i32;
+// 	end    : i32 = TEXTURE_SIZE;
+// 	size   : i32 = TEXTURE_SIZE;
+// 	width  : i32 = TEXTURE_WIDTH;
+// 	height : i32 = TEXTURE_HEIGHT;
+
+// 	mip_levels: [TEXTURE_COUNT][MIP_COUNT]^Texture;
+
+// 	for mip_level in 0..<MIP_COUNT {
+// 		for bitmap, i in &bitmaps[mip_level] {
+// 			bitmap_mips[i][mip_level] = &bitmap;
+
+// 			if mip_level == 0 do
+// 				readBitmapFromFile(&bitmap, bitmap_files[i], bitmaps_buffer[start:end]);
+// 			else do
+// 				initBitmap(&bitmap, width, height, bitmaps_buffer[start:end]);
+			
+// 			start += size;
+// 			end   += i == (TEXTURE_COUNT - 1) ? size / 4 : size;
+// 		}
+
+// 		width /= 2;
+// 		height /= 2;
+// 		size /= 4;
+// 	}
+// 	for mips in &bitmap_mips do setMips(mips[:]);
+
+// 	width = TEXTURE_WIDTH + 1;
+// 	height = TEXTURE_HEIGHT + 1;
+// 	size = width * height;
+// 	start = 0;
+// 	end = size;
+// 	for mip_level in 0..<MIP_COUNT {
+// 		for texture, texture_id in &textures[mip_level] {
+// 			initBitmap(&texture, width, height, textures_buffer[start:end]);
+// 			setTexture(&texture, &bitmaps[mip_level][texture_id]);
+	
+// 			start += size;
+// 			end   += texture_id == (TEXTURE_COUNT - 1) ? (
+// 				(((width  - 1) / 2) + 1) * 
+// 				(((height - 1) / 2) + 1)				
+// 			) : size;
+// 		}
+
+// 		width = ((width - 1) / 2) + 1;
+// 		height = ((height - 1) / 2) + 1;
+// 		size = width * height;
+// 	}
+
+// 	width = MAX_TILE_MAP_WIDTH * TEXTURE_WIDTH;
+// 	height = MAX_TILE_MAP_HEIGHT * TEXTURE_HEIGHT;
+// 	size = width * height;
+// 	start = 0;
+// 	end = size;
+	
+// 	for bitmaps, mip_level in &map_textures {
+// 		for bitmap, texture_id in &bitmaps.array {
+// 			initBitmap(&bitmap, width, height, map_textures_buffer[start:end]);
+			
+// 			start += size;
+// 			end   += texture_id == 2 ? size / 4 : size;
+// 		}
+
+// 		walls_mips[mip_level] = &bitmaps.walls;
+// 		floor_mips[mip_level] = &bitmaps.floor;
+// 		ceiling_mips[mip_level] = &bitmaps.ceiling;
+
+// 		width /= 2;
+// 		height /= 2;
+// 		size /= 4;
+// 	}
 // }

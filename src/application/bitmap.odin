@@ -1,156 +1,5 @@
 package application
 
-import "core:fmt"
-
-Pixel :: struct {
-	using color: Color,
-	opacity: u8
-}
-PixelRow :: []Pixel;
-PixelGrid :: []PixelRow;
-Bitmap :: struct {
-	all_pixels: PixelRow,
-	all_rows: []PixelRow,
-	pixels: PixelGrid,
-	width, height, size: i32	
-}
-initBitmap :: proc(using bitmap: ^Bitmap, new_width, new_height: i32, bits: []u32) {
-	all_pixels = transmute(PixelRow)(bits);
-	resizeBitmap(bitmap, new_width, new_height);
-}
-
-resizeBitmap :: proc(using bitmap: ^Bitmap, new_width, new_height: i32) {
-	width = new_width;
-	height = new_height;
-	size = width * height;
-
-	start: i32;
-	end := width;
-
-	all_rows = make_slice([]PixelRow, height);
-
-	for y in 0..<height {
-		all_rows[y] = all_pixels[start:end];
-		start += width;
-		end   += width;
-	}
-
-	pixels = all_rows[:height];
-}
-
-BLACK_PIXEL: Pixel = {color=BLACK, opacity=255};
-TRANSPARENT_PIXEL: Pixel = {color=BLACK, opacity=0};
-
-clearBitmap :: inline proc(using bm: ^Bitmap, transparent: bool = false) do 
-	for pixel in &all_pixels do 
-		pixel = transparent ? TRANSPARENT_PIXEL : BLACK_PIXEL;
-
-_readBitmapPixelsFromFileData :: proc(using bitmap: ^Bitmap, data: []u8) {
-	for row, y in &pixels do 
-		for pixel, x in &row {
-			pixel.color = (^Color)(&data[((height-1 -i32(y))*width + i32(x))*3])^;
-			pixel.opacity = (
-				pixel.color.R == 0xFF && 
-			 	pixel.color.B == 0xFF && 
-			 	pixel.color.G == 0
-			 ) ? 0 : 0xFF;
-		}
-}
-
-_readBitmapFromFile :: proc(using bitmap: ^Bitmap, file: []u8, bits: []u32) {
-	header:= (^BMP_FileHeader)(&file[0])^;
-
-	initBitmap(bitmap, header.width, header.height, bits);
-
-	_readBitmapPixelsFromFileData(bitmap, file[header.data_offset:]);
-}
-
-_allocateAndReadBitmapFromFile :: proc(using bitmap: ^Bitmap, file: []u8) {
-	header:= (^BMP_FileHeader)(&file[0])^;
-
-	bits := make_slice([]u32, header.width * header.height);
-	initBitmap(bitmap, header.width, header.height, bits);
-
-	_readBitmapPixelsFromFileData(bitmap, file[header.data_offset:]);
-}
-readBitmapFromFile :: proc{_readBitmapFromFile, _allocateAndReadBitmapFromFile};
-
-printBitmap :: proc(using bm: ^Bitmap) {
-	fmt.printf(TEXT_COLOR__RESET);
-
-	for row in &pixels {
-		for pixel in row {
-			using pixel.color;
-			if pixel.opacity == 0 do fmt.printf(TEXT_COLOR__BLACK);
-			else if R == 255 && G == 255 && B == 255 do fmt.printf(TEXT_COLOR__WHITE);
-			else if R == 255 && G ==   0 && B == 255 do fmt.printf(TEXT_COLOR__MAG);
-			else if G >= R && G >= B do fmt.printf(TEXT_COLOR__GREEN);
-			else if R >= G && R >= B do fmt.printf(TEXT_COLOR__RED);
-			else if B >= G && B >= R do fmt.printf(TEXT_COLOR__BLUE);
-			else do fmt.printf(TEXT_COLOR__MAG);
-
-			fmt.print('#');
-		}
-		fmt.println();
-	}
-
-	fmt.printf(TEXT_COLOR__RESET);
-}
-
-drawBitmap :: proc(from, to: ^Bitmap, to_x: i32 = 0, to_y: i32 = 0) {
-	if to_x > to.width ||
-	    to_y > to.height ||
-	    to_x + from.width < 0 ||
-	    to_y + from.height < 0 do
-	    return;
-
-	to_start: vec2i = {
-		max(to_x, 0),
-		max(to_y, 0)
-	}; 
-	to_end: vec2i = {
-		min(to_x+from.width, to.width),
-		min(to_y+from.height, to.height)
-	};
-
-	from_alpha, to_alpha: f32;
-	from_pixel, to_pixel: ^Pixel;
-	for y in to_start.y..<to_end.y {
-		for x in to_start.x..<to_end.x {
-			to_pixel := &to.pixels[y][x];
-			from_pixel = &from.pixels[y - to_y][x - to_x];
-
-			if from_pixel.opacity != 0 {
-				if from_pixel.opacity < 255 {
-					from_alpha = f32(from_pixel.opacity) / 255;
-					if to_pixel.opacity < 255 {
-						to_alpha = f32(to_pixel.opacity) / 255;
-						to_pixel.color.R = u8(min(255, f32(to_pixel.color.R) * to_alpha + f32(from_pixel.color.R) * from_alpha));
-						to_pixel.color.G = u8(min(255, f32(to_pixel.color.G) * to_alpha + f32(from_pixel.color.G) * from_alpha));
-						to_pixel.color.B = u8(min(255, f32(to_pixel.color.B) * to_alpha + f32(from_pixel.color.B) * from_alpha));
-						to_pixel.opacity = u8(min(1, to_alpha + from_alpha) * 255);
-					} else {
-						to_pixel.color.R = u8(min(255, f32(to_pixel.color.R) + f32(from_pixel.color.R) * from_alpha));
-						to_pixel.color.G = u8(min(255, f32(to_pixel.color.G) + f32(from_pixel.color.G) * from_alpha));
-						to_pixel.color.B = u8(min(255, f32(to_pixel.color.B) + f32(from_pixel.color.B) * from_alpha));
-					}
-				} else do to_pixel^ = from_pixel^;
-			}
-		} 
-	}
-}
-
-drawBitmapToScale :: proc(from, to: ^Bitmap) {
-	pixel_size := f32(from.width) / f32(to.width);
-
-	for y in 0..<to.height do
-		for x in 0..<to.width do
-			to.pixels[y][x] = from.pixels[i32(f32(y) * pixel_size)][i32(f32(x) * pixel_size)];
-}
-
-sampleBitmap :: inline proc(using bm: ^Bitmap, u, v: f32, pixel: ^Pixel) do
-	pixel^ = pixels[i32(v * f32(height))][i32(u * f32(width))];
-
 BMP_FileHeader :: struct #packed {
 	file_type : u16,  // Type of the file
     file_size : u32,  // Size of the file (in bytes)
@@ -176,3 +25,185 @@ BMP_FileHeader :: struct #packed {
     colors_used      : u32,  // User color count
     colors_important : u32   // Important color count
 };
+
+Pixel :: vec4;
+
+BLACK   : Pixel = {0x00, 0x00, 0x00, 0xFF};
+WHITE   : Pixel = {0xFF, 0xFF, 0xFF, 0xFF};
+GREY    : Pixel = {0x88, 0x88, 0x88, 0xFF};
+RED     : Pixel = {0xFF, 0x00, 0x00, 0xFF};
+GREEN   : Pixel = {0x00, 0xFF, 0x00, 0xFF};
+BLUE    : Pixel = {0x00, 0x00, 0xFF, 0xFF};
+YELLOW  : Pixel = {0xFF, 0xFF, 0x00, 0xFF};
+CYAN    : Pixel = {0x00, 0xFF, 0xFF, 0xFF};
+MAGENTA : Pixel = {0xFF, 0x00, 0xFF, 0xFF};
+
+Grid :: struct (Cell: typeid) {
+	_cells: []Cell,
+	_rows: [][]Cell,
+	cells: [][]Cell,
+	width, height, size: i32	
+}
+Bitmap :: Grid(Pixel);
+
+BitmapColor :: struct #packed {b, g, r: u8}
+BitmapPixel :: struct {using color: BitmapColor, a: u8} 
+FrameBufferPixel :: struct #raw_union {
+	using pixel: BitmapPixel, 
+	value: u32
+}
+FrameBuffer :: Grid(FrameBufferPixel);
+
+_setBitmapPixel :: inline proc(to: ^BitmapPixel, from: ^Pixel) {
+	to.r = u8(from.r);
+	to.g = u8(from.g);
+	to.b = u8(from.b);
+	to.a = u8(from.a);
+}
+_setFrameBufferPixelFromBitmapPixel :: inline proc(to: ^FrameBufferPixel, from: ^BitmapPixel) do to.pixel = from^; 
+_setFrameBufferPixel :: inline proc(to: ^FrameBufferPixel, from: ^Pixel) do _setBitmapPixel(&to.pixel, from);
+_setPixelFromBitmapPixel :: inline proc(to: ^Pixel, from: ^BitmapPixel) {
+	to.r = f32(from.r);
+	to.g = f32(from.g);
+	to.b = f32(from.b);
+	to.a = f32(from.a);	
+}
+_setPixel :: inline proc(to, from: ^Pixel) do to^ = from^;
+setPixel :: proc{_setPixel, _setBitmapPixel, _setFrameBufferPixel, _setPixelFromBitmapPixel, _setFrameBufferPixelFromBitmapPixel};
+
+initGrid :: proc(grid: ^Grid($Cell), width, height: i32, cells: []Cell) {
+	grid._cells = cells;
+	resizeGrid(grid, width, height);
+}
+
+resizeGrid :: proc(grid: ^Grid($Cell), width, height: i32) {
+	grid.width = width;
+	grid.height = height;
+	grid.size = width * height;
+
+	start: i32;
+	end := width;
+
+	grid._rows = make_slice([][]Cell, height);
+
+	for y in 0..<height {
+		grid._rows[y] = grid._cells[start:end];
+		start += width;
+		end   += width;
+	}
+
+	grid.cells = grid._rows[:height];
+}
+
+_clearPixel :: inline proc(color: ^$T, transparent: bool = false) {
+	color.r = 0;
+	color.g = 0;
+	color.b = 0;
+	color.a = transparent ? 0 : 0xFF;
+}
+_clearSample :: inline proc(sample: ^Sample, transparent: bool = false) do for pixel in sample do _clearPixel(&pixel, transparent);
+clearBitmap :: inline proc(bitmap: ^$T/Grid, transparent: bool = false) do for pixel in &bitmap._cells do clearPixel(&pixel, transparent);
+clearPixel :: proc{_clearPixel, _clearSample};
+
+_isTransparent :: inline proc(pixel: ^$T) -> bool do return pixel.r == 0xFF && pixel.b == 0xFF && pixel.g == 0;
+_readBitmapFromFileData :: proc(using bitmap: ^$T/Grid, bitmap_file_data: []u8) {
+	bitmap_pixel: BitmapPixel;
+	for row, y in &cells do 
+		for pixel, x in &row {
+			bitmap_pixel.color = (^BitmapColor)(&bitmap_file_data[((height-1 -i32(y))*width + i32(x))*3])^;
+			bitmap_pixel.a = _isTransparent(&bitmap_pixel) ? 0 : 0xFF;
+			setPixel(&pixel, &bitmap_pixel);
+		}
+}
+_readBitmapFromFile :: proc(bitmap: ^Grid($Cell), file: ^[]u8, pixels: []Cell) {
+	header:= (^BMP_FileHeader)(&file[0])^;
+	bitmap_file_data := file[header.data_offset:];
+
+	initGrid(bitmap, header.width, header.height, pixels);
+	_readBitmapFromFileData(bitmap, bitmap_file_data);
+}
+_allocateAndReadBitmapFromFile :: proc(bitmap: ^$T/Grid , file: ^[]u8) {
+	header:= (^BMP_FileHeader)(&file[0])^;
+	bitmap_file_data := file[header.data_offset:];
+
+	pixels := make_slice([]Cell, header.width * header.height);
+	initGrid(bitmap, header.width, header.height, pixels);
+	_readBitmapFromFileData(bitmap.cells, bitmap_file_data);
+}
+readBitmapFromFile :: proc{_readBitmapFromFile, _allocateAndReadBitmapFromFile};
+
+sampleGrid :: inline proc(using grid: ^Grid($Cell), u, v: f32, cell: ^Cell) do cell^ = grid.cells[i32(v * f32(height))][i32(u * f32(width))];
+scaleGrid :: proc(from: ^$T/Grid, to: ^$S/Grid) {
+	scale_factor := f32(from.width) / f32(to.width);
+	for y in 0..<to.height do
+		for x in 0..<to.width do
+			to.cells[y][x] = from.cells[i32(f32(y) * scale_factor)][i32(f32(x) * scale_factor)];
+}
+
+drawPixel :: inline proc(to_pixel: ^$To, from_pixel: ^$From) {
+	to_color: vec4;
+	from_alpha, to_alpha: f32;
+	if from_pixel.a != 0 {
+		if from_pixel.a < 255 {
+			from_alpha = f32(from_pixel.a) / 255;
+			if to_pixel.a < 255 {
+				to_alpha = f32(to_pixel.a) / 255;
+				to_color.r = min(255, f32(to_pixel.r) * to_alpha + f32(from_pixel.r) * from_alpha);
+				to_color.g = min(255, f32(to_pixel.g) * to_alpha + f32(from_pixel.g) * from_alpha);
+				to_color.b = min(255, f32(to_pixel.b) * to_alpha + f32(from_pixel.b) * from_alpha);
+				to_color.a = min(1, to_alpha + from_alpha) * 255;
+			} else {
+				to_color.r = min(255, f32(to_pixel.r) + f32(from_pixel.r) * from_alpha);
+				to_color.g = min(255, f32(to_pixel.g) + f32(from_pixel.g) * from_alpha);
+				to_color.b = min(255, f32(to_pixel.b) + f32(from_pixel.b) * from_alpha);
+				to_color.a = 255;
+			}
+			setPixel(to_pixel, &to_color);
+		} else do setPixel(to_pixel, from_pixel);
+	}
+}
+
+drawBitmap :: proc(from: ^$T/Grid, to: ^$S/Grid, to_x: i32 = 0, to_y: i32 = 0) {
+	if to_x > to.width ||
+	    to_y > to.height ||
+	    to_x + from.width < 0 ||
+	    to_y + from.height < 0 do
+	    return;
+
+	to_start: vec2i = {
+		max(to_x, 0),
+		max(to_y, 0)
+	}; 
+	to_end: vec2i = {
+		min(to_x+from.width, to.width),
+		min(to_y+from.height, to.height)
+	};
+
+	for y in to_start.y..<to_end.y do
+		for x in to_start.x..<to_end.x do 
+			drawPixel(&to.cells[y][x], &from.cells[y - to_y][x - to_x]);
+}
+
+
+import "core:fmt"
+
+printBitmap :: proc(bitmap: ^$T/Grid ) {
+	fmt.printf(TEXT_COLOR__RESET);
+
+	for row in &bitmap.cells {
+		for pixel in row {
+			if pixel.a == 0 do fmt.printf(TEXT_COLOR__BLACK);
+			else if pixel.r == 255 && pixel.g == 255 && pixel.b == 255 do fmt.printf(TEXT_COLOR__WHITE);
+			else if pixel.r == 255 && pixel.g ==   0 && pixel.b == 255 do fmt.printf(TEXT_COLOR__MAG);
+			else if pixel.g >= pixel.r && pixel.g >= pixel.b do fmt.printf(TEXT_COLOR__GREEN);
+			else if pixel.r >= pixel.g && pixel.r >= pixel.b do fmt.printf(TEXT_COLOR__RED);
+			else if pixel.b >= pixel.g && pixel.b >= pixel.r do fmt.printf(TEXT_COLOR__BLUE);
+			else do fmt.printf(TEXT_COLOR__MAG);
+
+			fmt.print('#');
+		}
+		fmt.println();
+	}
+
+	fmt.printf(TEXT_COLOR__RESET);
+}

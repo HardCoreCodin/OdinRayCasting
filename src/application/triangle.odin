@@ -1,6 +1,6 @@
 package application
 
-fillTriangle :: proc(X, Y: [3]f32, color: ^Color, using bitmap: ^Bitmap) {
+fillTriangle :: proc(using bitmap: ^$T/Grid, X, Y: [3]f32, pixel: ^$PixelType) {
     dx1, x1, y1, xs,
     dx2, x2, y2, xe,
     dx3, x3, y3, dy: f32;
@@ -31,7 +31,7 @@ fillTriangle :: proc(X, Y: [3]f32, color: ^Color, using bitmap: ^Bitmap) {
         if y == y2i do xe = (dx2 != 0) ? (x2 + dx2 * (1 - (y2 - f32(y2i)))) : x2;
         xsi = i32(xs);
         xei = i32(xe);
-        for x in xsi..<xei do all_pixels[offset + x].color = color^;
+        for x in xsi..<xei do setPixel(&_cells[offset + x], pixel);
         offset += width;
         xs += y < y3i ? dx3 : dx2;
         xe += y < y2i ? dx1 : dx2;

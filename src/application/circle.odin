@@ -1,11 +1,10 @@
 package application
 
-_drawCircle2Di :: inline proc(using bitmap: ^Bitmap, Px, Py, R: i32, color: Color, opacity: u8 = 255) {
+_drawCircle2Di :: inline proc(using bitmap: ^$T/Grid, Px, Py, R: i32, pixel: ^$PixelType) {
 	x, y, y2: i32;
 	r2 := R * R;
 	x2 := r2;
 	x = R;
-	c := color;
 	
 	Sx1 := Px - R;
 	Ex1 := Px + R;
@@ -19,21 +18,21 @@ _drawCircle2Di :: inline proc(using bitmap: ^Bitmap, Px, Py, R: i32, color: Colo
 
 	for y <= x {
 		if Sy1 >= 0 && Sy1 < size {
-			if Sx1 >= 0 && Sx1 < width do all_pixels[Sy1 + Sx1].color = c; 
-			if Ex1 >= 0 && Ex1 < width do all_pixels[Sy1 + Ex1].color = c;
+			if Sx1 >= 0 && Sx1 < width do setPixel(&_cells[Sy1 + Sx1], pixel); 
+			if Ex1 >= 0 && Ex1 < width do setPixel(&_cells[Sy1 + Ex1], pixel);
 		}
 		if Ey1 >= 0 && Ey1 < size {
-			if Sx1 >= 0 && Sx1 < width do all_pixels[Ey1 + Sx1].color = c;
-			if Ex1 >= 0 && Ex1 < width do all_pixels[Ey1 + Ex1].color = c; 
+			if Sx1 >= 0 && Sx1 < width do setPixel(&_cells[Ey1 + Sx1], pixel);
+			if Ex1 >= 0 && Ex1 < width do setPixel(&_cells[Ey1 + Ex1], pixel); 
 		}
 
 		if Sy2 >= 0 && Sy2 < size {
-			if Sx2 >= 0 && Sx2 < width do all_pixels[Sy2 + Sx2].color = c; 
-			if Ex2 >= 0 && Ex2 < width do all_pixels[Sy2 + Ex2].color = c; 
+			if Sx2 >= 0 && Sx2 < width do setPixel(&_cells[Sy2 + Sx2], pixel); 
+			if Ex2 >= 0 && Ex2 < width do setPixel(&_cells[Sy2 + Ex2], pixel); 
 		}
 		if Ey2 >= 0 && Ey2 < size {
-			if Sx2 >= 0 && Sx2 < width do all_pixels[Ey2 + Sx2].color = c; 
-			if Ex2 >= 0 && Ex2 < width do all_pixels[Ey2 + Ex2].color = c;
+			if Sx2 >= 0 && Sx2 < width do setPixel(&_cells[Ey2 + Sx2], pixel); 
+			if Ex2 >= 0 && Ex2 < width do setPixel(&_cells[Ey2 + Ex2], pixel);
 		}
 
 		if (x2 + y2) > r2 {
@@ -57,18 +56,16 @@ _drawCircle2Di :: inline proc(using bitmap: ^Bitmap, Px, Py, R: i32, color: Colo
 		Ex2 += 1;
 	}
 }
-_drawCircle2Df :: inline proc(bitmap: ^Bitmap, Px, Py, R: f32, color: Color, opacity: u8 = 255) do _drawCircle2Di(bitmap, i32(Px), i32(Py), i32(R), color, opacity);
-_drawCircle2DVec2i :: inline proc(bitmap: ^Bitmap, pos: vec2i, R: i32, color: Color, opacity: u8 = 255) do _drawCircle2Di(bitmap, pos.x, pos.y, R, color, opacity);
-_drawCircle2DVec2f :: inline proc(bitmap: ^Bitmap, pos: vec2,  R: f32, color: Color, opacity: u8 = 255) do _drawCircle2Df(bitmap, pos.x, pos.y, R, color, opacity);
+_drawCircle2Df :: inline proc(bitmap: ^$T/Grid, Px, Py, R: f32, pixel: ^$PixelType) do _drawCircle2Di(bitmap, i32(Px), i32(Py), i32(R), pixel);
+_drawCircle2DVec2i :: inline proc(bitmap: ^$T/Grid, pos: vec2i, R: i32, pixel: ^$PixelType) do _drawCircle2Di(bitmap, pos.x, pos.y, R, pixel);
+_drawCircle2DVec2f :: inline proc(bitmap: ^$T/Grid, pos: vec2,  R: f32, pixel: ^$PixelType) do _drawCircle2Df(bitmap, pos.x, pos.y, R, pixel);
 drawCircle :: proc{_drawCircle2Di, _drawCircle2Df, _drawCircle2DVec2i, _drawCircle2DVec2f};
 
-_fillCircle2Di :: inline proc(using bitmap: ^Bitmap, Px, Py, R: i32, color: Color, opacity: u8 = 255) {
-	pixel: Pixel = {color = color, opacity = opacity};
-
+_fillCircle2Di :: inline proc(using bitmap: ^$T/Grid, Px, Py, R: i32, pixel: ^$PixelType) {
 	if R == 1 {
 		if inRange(0, Px, width-1) &&
 		   inRange(0, Py, height-1) do
-		   pixels[Py][Px] = pixel;
+		   setPixel(&cells[Py][Px], pixel);
 		return;
 	}
 
@@ -88,11 +85,11 @@ _fillCircle2Di :: inline proc(using bitmap: ^Bitmap, Px, Py, R: i32, color: Colo
 	Ey2 := (Py + R) * width;
 	
 	for y <= x {
-		if Sy1 >= 0 && Sy1 < size do for x1 in max(Sx1, 0)..min(Ex1, width-1) do all_pixels[Sy1 + x1] = pixel;
-		if Ey1 >= 0 && Ey1 < size do for x1 in max(Sx1, 0)..min(Ex1, width-1) do all_pixels[Ey1 + x1] = pixel;
+		if Sy1 >= 0 && Sy1 < size do for x1 in max(Sx1, 0)..min(Ex1, width-1) do setPixel(&_cells[Sy1 + x1], pixel);
+		if Ey1 >= 0 && Ey1 < size do for x1 in max(Sx1, 0)..min(Ex1, width-1) do setPixel(&_cells[Ey1 + x1], pixel);
 		
-		if Sy2 >= 0 && Sy2 < size do for x2 in max(Sx2, 0)..min(Ex2, width-1) do all_pixels[Sy2 + x2] = pixel;
-		if Ey2 >= 0 && Ey2 < size do for x2 in max(Sx2, 0)..min(Ex2, width-1) do all_pixels[Ey2 + x2] = pixel; 
+		if Sy2 >= 0 && Sy2 < size do for x2 in max(Sx2, 0)..min(Ex2, width-1) do setPixel(&_cells[Sy2 + x2], pixel);
+		if Ey2 >= 0 && Ey2 < size do for x2 in max(Sx2, 0)..min(Ex2, width-1) do setPixel(&_cells[Ey2 + x2], pixel); 
 
 		if (x2 + y2) > r2 {
 			x -= 1;
@@ -115,17 +112,16 @@ _fillCircle2Di :: inline proc(using bitmap: ^Bitmap, Px, Py, R: i32, color: Colo
 		Ex2 += 1;
 	}
 }
-_fillCircle2Df :: inline proc(bitmap: ^Bitmap, Px, Py, R: f32, color: Color, opacity: u8 = 255) do _fillCircle2Di(bitmap, i32(Px), i32(Py), i32(R), color, opacity);
-_fillCircle2DVec2i :: inline proc(bitmap: ^Bitmap, pos: vec2i, R: i32, color: Color, opacity: u8 = 255) do _fillCircle2Di(bitmap, pos.x, pos.y, R, color, opacity);
-_fillCircle2DVec2f :: inline proc(bitmap: ^Bitmap, pos: vec2,  R: f32, color: Color, opacity: u8 = 255) do _fillCircle2Df(bitmap, pos.x, pos.y, R, color, opacity);
+_fillCircle2Df :: inline proc(bitmap: ^$T/Grid, Px, Py, R: f32, pixel: ^$PixelType) do _fillCircle2Di(bitmap, i32(Px), i32(Py), i32(R), pixel);
+_fillCircle2DVec2i :: inline proc(bitmap: ^$T/Grid, pos: vec2i, R: i32, pixel: ^$PixelType) do _fillCircle2Di(bitmap, pos.x, pos.y, R, pixel);
+_fillCircle2DVec2f :: inline proc(bitmap: ^$T/Grid, pos: vec2,  R: f32, pixel: ^$PixelType) do _fillCircle2Df(bitmap, pos.x, pos.y, R, pixel);
 fillCircle :: proc{_fillCircle2Di, _fillCircle2Df, _fillCircle2DVec2i, _fillCircle2DVec2f};
 
-drawCircleUnsafe :: proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitmap) {
+drawCircleUnsafe :: proc(using bitmap: ^$T/Grid, Px, Py, R: i32, pixel: ^$PixelType) {
 	x, y, y2: i32;
 	r2 := R * R;
 	x2 := r2;
 	x = R;
-	c := color;
 	
 	Sx1 := Px - R;
 	Ex1 := Px + R;
@@ -138,18 +134,17 @@ drawCircleUnsafe :: proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitmap) {
 	Ey2 := (Py + R) * width;
 
 	for y <= x {
-		all_pixels[Sy1 + Sx1].color = c; 
-		all_pixels[Ey1 + Sx1].color = c;
+		setPixel(&_cells[Sy1 + Sx1], pixel);
+		setPixel(&_cells[Ey1 + Sx1], pixel);
 
-		all_pixels[Sy1 + Ex1].color = c;
-		all_pixels[Ey1 + Ex1].color = c; 
+		setPixel(&_cells[Sy1 + Ex1], pixel);
+		setPixel(&_cells[Ey1 + Ex1], pixel);
 
+		setPixel(&_cells[Sy2 + Sx2], pixel);
+		setPixel(&_cells[Sy2 + Ex2], pixel);
 
-		all_pixels[Sy2 + Sx2].color = c; 
-		all_pixels[Sy2 + Ex2].color = c; 
-
-		all_pixels[Ey2 + Sx2].color = c; 
-		all_pixels[Ey2 + Ex2].color = c;
+		setPixel(&_cells[Ey2 + Sx2], pixel);
+		setPixel(&_cells[Ey2 + Ex2], pixel);
 
 		if (x2 + y2) > r2 {
 			x -= 1;
@@ -173,12 +168,11 @@ drawCircleUnsafe :: proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitmap) {
 	}
 }
 
-fillCircleUnsafe :: proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitmap) {
+fillCircleUnsafe :: proc(using bitmap: ^$T/Grid, Px, Py, R: i32, pixel: ^$PixelType) {
 	x, y, y2: i32;
 	r2 := R * R;
 	x2 := r2;
 	x = R;
-	c := color;
 	
 	Sx1 := Px - R;
 	Ex1 := Px + R;
@@ -192,12 +186,12 @@ fillCircleUnsafe :: proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitmap) {
 
 	for y <= x {
 		for x1 in Sx1..Ex1 {
-			all_pixels[Sy1 + x1].color = c;
-			all_pixels[Ey1 + x1].color = c; 
+			setPixel(&_cells[Sy1 + x1], pixel);
+			setPixel(&_cells[Ey1 + x1], pixel);
 		}
 		for x2 in Sx2..Ex2 {
-			all_pixels[Sy2 + x2].color = c;
-			all_pixels[Ey2 + x2].color = c; 
+			setPixel(&_cells[Sy2 + x2], pixel);
+			setPixel(&_cells[Ey2 + x2], pixel);
 		}
 
 		if (x2 + y2) > r2 {
@@ -223,7 +217,7 @@ fillCircleUnsafe :: proc(Px, Py, R: i32, color: Color, using bitmap: ^Bitmap) {
 }
 
 
-drawCircle2 :: proc(pos: vec2i, radius: i32, color: Color, using bitmap: ^Bitmap) {
+drawCircle2 :: proc(using bitmap: ^$T/Grid, pos: vec2i, radius: i32, pixel: ^$PixelType) {
 	right := pos.x + radius;
 	left  := pos.x - radius;
 
@@ -250,13 +244,13 @@ drawCircle2 :: proc(pos: vec2i, radius: i32, color: Color, using bitmap: ^Bitmap
 		bottom_in_range = bottom >= 0 && bottom < height;
 
 		if right_in_range {
-	   		if top_in_range    do pixels[top   ][right].color = color;
-	   		if bottom_in_range do pixels[bottom][right].color = color;
+	   		if top_in_range    do setPixel(&cells[top   ][right], pixel);
+	   		if bottom_in_range do setPixel(&cells[bottom][right], pixel);
 	   	}
 
 		if left_in_range {
-	   		if top_in_range    do pixels[top   ][left].color = color;
-	   		if bottom_in_range do pixels[bottom][left].color = color;
+	   		if top_in_range    do setPixel(&cells[top   ][left], pixel);
+	   		if bottom_in_range do setPixel(&cells[bottom][left], pixel);
 	   	}
 
 	   	// Rotate 90 deg.
@@ -271,13 +265,13 @@ drawCircle2 :: proc(pos: vec2i, radius: i32, color: Color, using bitmap: ^Bitmap
 		bottom_in_range = r_bottom >= 0 && r_bottom < height;
 
 		if top_in_range {
-	   		if right_in_range do pixels[r_top][r_right].color = color;
-	   		if left_in_range  do pixels[r_top][r_left ].color = color;
+	   		if right_in_range do setPixel(&cells[r_top][r_right], pixel);
+	   		if left_in_range  do setPixel(&cells[r_top][r_left ], pixel);
 	   	}
 
 		if bottom_in_range {
-	   		if right_in_range do pixels[r_bottom][r_right].color = color;
-	   		if left_in_range  do pixels[r_bottom][r_left ].color = color;
+	   		if right_in_range do setPixel(&cells[r_bottom][r_right], pixel);
+	   		if left_in_range  do setPixel(&cells[r_bottom][r_left ], pixel);
 	   	}
 
 		if x2 + y*y > r2 {
