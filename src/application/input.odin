@@ -7,8 +7,11 @@ move_down,
 move_forward,
 move_backward,
 ctrl_is_pressed,
-toggle1,
-toggle2: bool;
+show_minimap,
+show_minimap_debug: bool;
+
+FilterMode :: enum {None, BiLinear, TriLinear}
+filter_mode: FilterMode;
 
 up_key, 
 down_key, 
@@ -16,8 +19,11 @@ left_key, turn_left_key,
 right_key, turn_right_key,
 forward_key,
 backward_key,
-toggle1_key,
-toggle2_key,
+toggle_map,
+toggle_map_debug,
+no_filter,
+bi_linear,
+tri_linear,
 ctrl_key,
 exit_key: u8;
 
@@ -31,8 +37,11 @@ keyChanged :: proc(key: u8, pressed: bool) {
 		case down_key: move_down = pressed;
 		case forward_key: move_forward = pressed;	
 		case backward_key: move_backward = pressed;	
-		case toggle1_key: if !pressed do toggle1 = !toggle1;	
-		case toggle2_key: if !pressed do toggle2 = !toggle2;
+		case toggle_map: if !pressed do show_minimap = !show_minimap;
+		case toggle_map_debug: if !pressed do show_minimap_debug = !show_minimap_debug;
+		case no_filter: if !pressed do filter_mode = FilterMode.None;
+		case bi_linear: if !pressed do filter_mode = FilterMode.BiLinear;
+		case tri_linear: if !pressed do filter_mode = FilterMode.TriLinear;
 		case ctrl_key: ctrl_is_pressed = pressed;		
 		case exit_key: is_running = false;
 	}

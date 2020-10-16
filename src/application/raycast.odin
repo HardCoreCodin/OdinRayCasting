@@ -109,7 +109,7 @@ generateRays :: proc() {
     num_vertical_hit_infos := len(vertical_hit_infos); 
 
     vertical_hit_info: ^VerticalHitInfo;
-    current_mip_level: f32 = f32(len(walls_map_texture.bitmaps));  
+    current_mip_level: f32 = f32(MIP_COUNT);  
     current_mip_levelI: i32;
 
     for y in 1..num_vertical_hit_infos {

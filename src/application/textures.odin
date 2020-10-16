@@ -6,59 +6,6 @@ Texture :: struct {
 	bitmaps: []^Bitmap
 	samples: []^Samples
 }
-TextureSet :: struct {
-	bitmaps: [][]Bitmap,
-	samples: [][]Samples,
-	textures: []Texture
-}
-
-initTextureSet :: proc(using ts: ^TextureSet, count, width, height: i32) {
-	mip_count: i32 = 1;
-	mip_width: i32 = 1;
-	
-	for mip_width < width {
-		mip_width *= 2;
-		mip_count += 1;
-	}
-
-	textures = make_slice([]Texture, count);
-	for texture in &textures {
-		texture.bitmaps = make_slice([]^Bitmap, mip_count);
-		texture.samples = make_slice([]^Samples, mip_count);
-	}
-
-	o: i32;
-	w := width;
-	h := height;
-	s := w * h;
-
-	bitmaps = make_slice([][]Bitmap , mip_count);
-	samples = make_slice([][]Samples, mip_count);
-
-	for m in 0..<mip_count {
-		bitmaps[m] = make_slice([]Bitmap , count);
-		samples[m] = make_slice([]Samples, count);
-
-		all_pixels  := make_slice([]Pixel , count * s);
-		all_samples := make_slice([]Sample, count * s);
-
-		o = 0;
-
-		for t in 0..<count {
-			initGrid(&bitmaps[m][t], w, h, all_pixels[ o:o+s]);
-			initGrid(&samples[m][t], w, h, all_samples[o:o+s]);
-
-			textures[t].bitmaps[m] = &bitmaps[m][t];
-			textures[t].samples[m] = &samples[m][t];
-			
-			o += s;
-		}
-
-		w >>= 1;
-		h >>= 1;
-		s = w*h;
-	}
-}
 
 generateMipMaps :: proc(mipmaps: ^[]^Bitmap) {
 	src := mipmaps[0];
@@ -212,7 +159,7 @@ generateTextureSamples :: proc(using texture: ^Texture, smear_edges: bool = true
 	for bitmap, mip in &bitmaps do 
 		generateSamplesFromBitmap(samples[mip], bitmap, smear_edges, wrap_edges);
 
-sample :: inline proc(using samples: ^Samples, u, v: f32, out: ^$Out) {
+sample2 :: inline proc(using samples: ^Samples, u, v: f32, out: ^$Out) {
 	U := u * f32(width ) - 0.5;
 	V := v * f32(height) - 0.5;
 	
@@ -225,21 +172,33 @@ sample :: inline proc(using samples: ^Samples, u, v: f32, out: ^$Out) {
 	l := 1 - r;
 	t := 1 - b;
 
-	tl := t * l;    tr := t * r;
-	bl := b * l;    br := b * r;
-	
-	sample := cells[y][x];
-	sample[0] *= tl;   sample[1] *= tr;  
-	sample[2] *= bl;   sample[3] *= br;
-	
-	sample[0] += sample[1];
-	sample[2] += sample[3];
+	// tl := t * l;    tr := t * r;
+	// bl := b * l;    br := b * r;
 
-	sample[0] += sample[2];
-	// sample[0].a = 255;
-	
-	setPixel(out, &sample[0]);
+	samples := &cells[y][x];
+
+	// using samples;
+	top := samples[0] * l + samples[1] * r;
+	bottom := samples[2] * l + samples[3] * r;
+	out^ = top * t + bottom * b;
+
+	// out.R = u8(result.r);
+	// out.G = u8(result.g);
+	// out.B = u8(result.b);
+	// out.a = u8(result.a);
 }
+sample :: inline proc(using samples: ^Samples, u, v: f32, out: ^$Out) {
+	U := u * f32(width ) - 0.5; x := i32(U);
+	V := v * f32(height) - 0.5; y := i32(V);
+	r := U - f32(x); l := 1 - r;
+	b := V - f32(y); t := 1 - b;
+
+	samples := &cells[y][x];
+	// using samples;
+	// color^ = TL*t*l + TR*t*r + BL*b*l + BR*b*r;
+	out^ = samples[0]*t*l + samples[0]*t*r + samples[2]*b*l + samples[3]*b*r;
+}
+
 sampleTexture :: inline proc(texture: ^Texture, mip_level: u8, u, v: f32, out: ^$Out) do _sample(texture.samples[mip_level], u, v, out);
 
 scaleTexture :: proc(from: ^Samples, to: ^$S/Grid) {
@@ -252,13 +211,4 @@ loadTexture :: proc(using texture: ^Texture, file: ^[]u8, smear_edges: bool = tr
 	readBitmapFromFile(bitmaps[0], file, bitmaps[0]._cells);
 	generateMipMaps(&bitmaps);
 	generateTextureSamples(texture, smear_edges, wrap_edges);
-}
-
-loadTextureSet :: proc(using texture_set: ^TextureSet, file_buffers: ^[][]u8, width, height: i32, smear_edges: bool = true, wrap_edges: bool = false) {
-	if len(samples) == 0 do
-		initTextureSet(texture_set, i32(len(file_buffers)), width, height);
-
-	for texture, texture_id in &textures {
-		loadTexture(&texture, &file_buffers[texture_id], smear_edges, wrap_edges);
-	}
 }

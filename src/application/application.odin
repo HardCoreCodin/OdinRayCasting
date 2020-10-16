@@ -144,6 +144,7 @@ resize :: proc(new_width, new_height: i32) {
 	onResize();
 	update();
 	render();
+	print(new_width, new_height);
 }
 
 mouseOnMiniMap :: inline proc() -> bool do return mini_map.is_visible && inBounds(mini_map.screen_bounds, mouse_pos);
@@ -156,9 +157,9 @@ update :: proc() {
 	mini_map.panned = false;
 	mini_map.zoom.changed = false;
 	mini_map.resize.changed = false;
-	mini_map.toggled = mini_map.is_visible != toggle1 || mini_map.is_debug_visible != toggle2;
-	mini_map.is_visible = toggle1;
-	mini_map.is_debug_visible = toggle2;
+	mini_map.toggled = mini_map.is_visible != show_minimap || mini_map.is_debug_visible != show_minimap_debug;
+	mini_map.is_visible = show_minimap;
+	mini_map.is_debug_visible = show_minimap_debug;
 
 	ticks_after = getTicks();
 	ticks_diff = ticks_after - ticks_before;
@@ -234,8 +235,6 @@ update :: proc() {
 	if tile_map_changed {
 		generateTileMapEdges(&tile_map);
 		drawMiniMapTextures(&mini_map);
-		// drawMapTextures(&tile_map, true);
-		// scaleTexture(walls_map_texture.samples[0], &mini_map.walls);
 	}
 	if tile_map_changed || moved {
 		moveTileMap(&tile_map, position);
@@ -309,7 +308,7 @@ render :: proc() {
 initApplication :: proc(platformGetTicks: GetTicks, platformTicksPerSecond: u64) {
 	using camera.xform;
 	position = 20;
-	toggle1 = true;
+
 	initTimers(platformGetTicks, platformTicksPerSecond);
 
 	initGrid(&frame_buffer, FRAME_BUFFER__MAX_WIDTH, FRAME_BUFFER__MAX_HEIGHT, transmute([]FrameBufferPixel)(frame_buffer_bits[:]));
@@ -326,9 +325,13 @@ initApplication :: proc(platformGetTicks: GetTicks, platformTicksPerSecond: u64)
 	moveTileMap(&tile_map, position);
 	
 	initRayCast();
-    drawMapTextures(&tile_map, true, true, true);
+    // drawMapTextures(&tile_map, true, true, true);
 
 	initMiniMap(&mini_map, &tile_map, &position);
 	drawMiniMap(&mini_map);
+
+	show_minimap = true;
+	filter_mode = FilterMode.BiLinear;
+
 	UPDATE_INTERVAL = ticks_per_second / TARGET_FPS;
 }

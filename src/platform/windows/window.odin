@@ -139,8 +139,12 @@ run_application :: proc() {
 	backward_key = 'S';
 	left_key     = 'A';  turn_left_key  = 'Q';
 	right_key    = 'D';  turn_right_key = 'E';
-	toggle1_key  = '1';
-	toggle2_key  = '2';
+	
+	toggle_map_debug = '9';
+	toggle_map   = '0';
+	no_filter    = '1';
+	bi_linear    = '2';
+	tri_linear   = '3';
 	ctrl_key     = VK_CONTROL;
 	exit_key     = VK_ESCAPE;
 
