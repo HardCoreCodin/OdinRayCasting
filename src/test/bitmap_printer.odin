@@ -6,52 +6,6 @@ Bitmap :: application.Bitmap;
 Pixel :: application.Pixel;
 PixelRow :: []application.Pixel;
 
-RED_PIXEL := application.RED;
-BLUE_PIXEL := application.BLUE;
-GREEN_PIXEL := application.GREEN;
-YELLOW_PIXEL := application.YELLOW;
-
-FIRST_PIXEL_ROW: PixelRow = {
-	RED_PIXEL,
-	RED_PIXEL,
-	RED_PIXEL,
-	RED_PIXEL,
-
-	GREEN_PIXEL,
-	GREEN_PIXEL,
-	GREEN_PIXEL,
-	GREEN_PIXEL
-};
-
-LAST_PIXEL_ROW: PixelRow = {
-	BLUE_PIXEL,
-	BLUE_PIXEL,
-	BLUE_PIXEL,
-	BLUE_PIXEL,
-
-	YELLOW_PIXEL,
-	YELLOW_PIXEL,
-	YELLOW_PIXEL,
-	YELLOW_PIXEL
-};
-
-brush: Bitmap = {
-	width = 8,
-	height = 8,
-
-	cells = {
-		FIRST_PIXEL_ROW,
-		FIRST_PIXEL_ROW,
-		FIRST_PIXEL_ROW,
-		FIRST_PIXEL_ROW,
-
-		LAST_PIXEL_ROW,
-		LAST_PIXEL_ROW,
-		LAST_PIXEL_ROW,
-		LAST_PIXEL_ROW
-	}
-};
-
 // brush_from_file: Bitmap = {
 //     width  =  32 ,
 //     height =  32 ,
@@ -124,6 +78,54 @@ bitmap_from_file: Bitmap;
 texture: application.Texture;
 
 doit :: proc() {
+
+RED_PIXEL := application.RED;
+BLUE_PIXEL := application.BLUE;
+GREEN_PIXEL := application.GREEN;
+YELLOW_PIXEL := application.YELLOW;
+
+FIRST_PIXEL_ROW: PixelRow = {
+	RED_PIXEL,
+	RED_PIXEL,
+	RED_PIXEL,
+	RED_PIXEL,
+
+	GREEN_PIXEL,
+	GREEN_PIXEL,
+	GREEN_PIXEL,
+	GREEN_PIXEL
+};
+
+LAST_PIXEL_ROW: PixelRow = {
+	BLUE_PIXEL,
+	BLUE_PIXEL,
+	BLUE_PIXEL,
+	BLUE_PIXEL,
+
+	YELLOW_PIXEL,
+	YELLOW_PIXEL,
+	YELLOW_PIXEL,
+	YELLOW_PIXEL
+};
+
+brush: Bitmap = {
+	width = 8,
+	height = 8,
+
+	cells = {
+		FIRST_PIXEL_ROW,
+		FIRST_PIXEL_ROW,
+		FIRST_PIXEL_ROW,
+		FIRST_PIXEL_ROW,
+
+		LAST_PIXEL_ROW,
+		LAST_PIXEL_ROW,
+		LAST_PIXEL_ROW,
+		LAST_PIXEL_ROW
+	}
+};
+
+	
 	// application.readBitmapFromFile(&bitmap_from_file, file, bits[:]);
 	application.printBitmap(&bitmap_from_file);
 	// application.initTexture(&texture, &bitmap_from_file);

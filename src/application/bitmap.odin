@@ -26,17 +26,67 @@ BMP_FileHeader :: struct #packed {
     colors_important : u32   // Important color count
 };
 
-Pixel :: vec4;
+BitmapColor :: struct #packed {b, g, r: u8}
+BitmapPixel :: struct {using color: BitmapColor, a: u8} 
+Pixel :: struct #raw_union {
+	using pixel: BitmapPixel,
+	value: u32
+}
 
-BLACK   : Pixel = {0x00, 0x00, 0x00, 0xFF};
-WHITE   : Pixel = {0xFF, 0xFF, 0xFF, 0xFF};
-GREY    : Pixel = {0x88, 0x88, 0x88, 0xFF};
-RED     : Pixel = {0xFF, 0x00, 0x00, 0xFF};
-GREEN   : Pixel = {0x00, 0xFF, 0x00, 0xFF};
-BLUE    : Pixel = {0x00, 0x00, 0xFF, 0xFF};
-YELLOW  : Pixel = {0xFF, 0xFF, 0x00, 0xFF};
-CYAN    : Pixel = {0x00, 0xFF, 0xFF, 0xFF};
-MAGENTA : Pixel = {0xFF, 0x00, 0xFF, 0xFF};
+BLACK,
+WHITE,
+GREY ,
+RED  ,
+GREEN,
+BLUE ,
+YELLOW,
+CYAN ,
+MAGENTA: Pixel;
+
+initColors :: proc() {
+	BLACK.r = 0x00;
+	BLACK.g = 0x00;
+	BLACK.b = 0x00;
+	BLACK.a = 0xFF;
+	WHITE.r = 0xFF;
+	WHITE.g = 0xFF;
+	WHITE.b = 0xFF;
+	WHITE.a = 0xFF;
+
+	GREY.r = 0x88;
+	GREY.g = 0x88;
+	GREY.b = 0x88;
+	GREY.a = 0xFF;
+
+	RED.r = 0xFF;
+	RED.g = 0x00;
+	RED.b = 0x00;
+	RED.a = 0xFF;
+	GREEN.r = 0x00;
+	GREEN.g = 0xFF;
+	GREEN.b = 0x00;
+	GREEN.a = 0xFF;
+
+	BLUE.r = 0x00;
+	BLUE.g = 0x00;
+	BLUE.b = 0xFF;
+	BLUE.a = 0xFF;
+
+	YELLOW.r = 0xFF;
+	YELLOW.g = 0xFF;
+	YELLOW.b = 0x00;
+	YELLOW.a = 0xFF;
+
+	CYAN.r = 0x00;
+	CYAN.g = 0xFF;
+	CYAN.b = 0xFF;
+	CYAN.a = 0xFF;
+
+	MAGENTA.r = 0xFF;
+	MAGENTA.g = 0x00;
+	MAGENTA.b = 0xFF;
+	MAGENTA.a = 0xFF;
+}
 
 Grid :: struct (Cell: typeid) {
 	_cells: []Cell,
@@ -46,30 +96,21 @@ Grid :: struct (Cell: typeid) {
 }
 Bitmap :: Grid(Pixel);
 
-BitmapColor :: struct #packed {b, g, r: u8}
-BitmapPixel :: struct {using color: BitmapColor, a: u8} 
-FrameBufferPixel :: struct #raw_union {
-	using pixel: BitmapPixel, 
-	value: u32
+_setPixelPP :: inline proc(to: ^Pixel, from: ^Pixel) do to^ = from^;
+_setPixelVV :: inline proc(to: ^vec4, from: ^vec4) do to^ = from^;
+_setPixelVP :: inline proc(to: ^vec4, from: ^Pixel) {
+	to.r = f32(from.r);
+	to.g = f32(from.g);
+	to.b = f32(from.b);
+	to.a = f32(from.a);
 }
-FrameBuffer :: Grid(FrameBufferPixel);
-
-_setBitmapPixel :: inline proc(to: ^BitmapPixel, from: ^Pixel) {
+_setPixelPV :: inline proc(to: ^Pixel, from: ^vec4) {
 	to.r = u8(from.r);
 	to.g = u8(from.g);
 	to.b = u8(from.b);
 	to.a = u8(from.a);
 }
-_setFrameBufferPixelFromBitmapPixel :: inline proc(to: ^FrameBufferPixel, from: ^BitmapPixel) do to.pixel = from^; 
-_setFrameBufferPixel :: inline proc(to: ^FrameBufferPixel, from: ^Pixel) do _setBitmapPixel(&to.pixel, from);
-_setPixelFromBitmapPixel :: inline proc(to: ^Pixel, from: ^BitmapPixel) {
-	to.r = f32(from.r);
-	to.g = f32(from.g);
-	to.b = f32(from.b);
-	to.a = f32(from.a);	
-}
-_setPixel :: inline proc(to, from: ^Pixel) do to^ = from^;
-setPixel :: proc{_setPixel, _setBitmapPixel, _setFrameBufferPixel, _setPixelFromBitmapPixel, _setFrameBufferPixelFromBitmapPixel};
+setPixel :: proc{_setPixelPP, _setPixelVV, _setPixelVP, _setPixelPV};
 
 initGrid :: proc(grid: ^Grid($Cell), width, height: i32, cells: []Cell) {
 	grid._cells = cells;
@@ -110,9 +151,8 @@ _readBitmapFromFileData :: proc(using bitmap: ^$T/Grid, bitmap_file_data: []u8) 
 	bitmap_pixel: BitmapPixel;
 	for row, y in &cells do 
 		for pixel, x in &row {
-			bitmap_pixel.color = (^BitmapColor)(&bitmap_file_data[((height-1 -i32(y))*width + i32(x))*3])^;
-			bitmap_pixel.a = _isTransparent(&bitmap_pixel) ? 0 : 0xFF;
-			setPixel(&pixel, &bitmap_pixel);
+			pixel.color = (^BitmapColor)(&bitmap_file_data[((height-1 -i32(y))*width + i32(x))*3])^;
+			pixel.a = _isTransparent(&pixel.color) ? 0 : 0xFF;
 		}
 }
 _readBitmapFromFile :: proc(bitmap: ^Grid($Cell), file: ^[]u8, pixels: []Cell) {
@@ -132,12 +172,12 @@ _allocateAndReadBitmapFromFile :: proc(bitmap: ^$T/Grid , file: ^[]u8) {
 }
 readBitmapFromFile :: proc{_readBitmapFromFile, _allocateAndReadBitmapFromFile};
 
-sampleGrid :: inline proc(using grid: ^Grid($Cell), u, v: f32, cell: ^Cell) do cell^ = grid.cells[i32(v * f32(height))][i32(u * f32(width))];
+sampleGrid :: inline proc(using grid: ^$T/Grid, u, v: f32, cell: ^$Cell) do setPixel(cell, &grid.cells[i32(v * f32(height))][i32(u * f32(width))]);
 scaleGrid :: proc(from: ^$T/Grid, to: ^$S/Grid) {
 	scale_factor := f32(from.width) / f32(to.width);
 	for y in 0..<to.height do
 		for x in 0..<to.width do
-			to.cells[y][x] = from.cells[i32(f32(y) * scale_factor)][i32(f32(x) * scale_factor)];
+			setPixel(&to.cells[y][x], &from.cells[i32(f32(y) * scale_factor)][i32(f32(x) * scale_factor)]);
 }
 
 drawPixel :: inline proc(to_pixel: ^$To, from_pixel: ^$From) {

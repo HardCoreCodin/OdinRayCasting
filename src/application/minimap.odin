@@ -130,8 +130,8 @@ resizeMiniMap :: inline proc(using mm: ^MiniMap, new_size: i32) {
 	s := clamp(new_size, MINIMAP__MIN_SIZE, MINIMAP__MAX_SIZE);
 	resizeGrid(&canvas, s, s);
 	resizeGrid(&view, s, s);
-	
 	resetMiniMapSize(mm);
+	
 	screen_bounds.max.x = screen_bounds.min.x + canvas.width;
 	screen_bounds.max.y = screen_bounds.min.y + canvas.height;
 }
@@ -153,11 +153,11 @@ resetMiniMapSize :: proc(using mm: ^MiniMap) {
 
 	w := i32(size.scaled.width);
 	h := i32(size.scaled.height);
+	
 	resizeGrid(&walls,   w, h);
 	resizeGrid(&floor,   w, h);
 	resizeGrid(&ceiling, w, h);
 	resizeGrid(&view,    w, h);
-
 	mip_level = 0;
 	mip_pixel_width: f32 = 1;
 
@@ -202,56 +202,13 @@ drawMiniMapPlayerView :: proc(using mm: ^MiniMap) {
 }
 
 drawMiniMapTextures :: proc(using mm: ^MiniMap) {
-	clearBitmap(&walls, true);
-	clearBitmap(&floor);
-	// clearBitmap(&ceiling);
-	// mip_level = 1;
-
+	clearBitmap(&floor);	
+    clearBitmap(&walls, true);
 	
-  //   column_id,
-  //   current_row_is_full: u32;
-
-  //   texture_ids_row: ^[]TileTextureIDs;
-  //   tile_texture_ids: ^TileTextureIDs;
-
-  //   tile_width := i32(size.scaled_tile.width);
-  //   tile_height := i32(size.scaled_tile.height);
-    
-  //   pos: vec2i;
-
-  //   for y in 0..<tile_map.height {
-  //   	pos.x = 0;
-
-		// column_id = 1;
-		// current_row_is_full = tile_map.is_full[y]; 
-		// texture_ids_row = &tile_map.texture_ids.cells[y];
-
-		// for x in 0..<tile_map.width {
-		// 	tile_texture_ids = &texture_ids_row[x];
-
-  //       	if (current_row_is_full & column_id) != 0 do
-  //       		drawBitmap(&scaled_textures[tile_texture_ids.wall], &walls, pos.x, pos.y);
-
-  //       	drawBitmap(&scaled_textures[tile_texture_ids.floor], &floor, pos.x, pos.y);
-        	
-		// 	column_id <<= 1;
-		// 	pos.x += tile_width;			
-  //       }
-  //       pos.y += tile_height;
-  //   }
-    
     tile_index: vec2i;
-    column_id: u32 = 1;
-	
-	texture_ids_row := &tile_map.texture_ids.cells[0];
-	tile_texture_ids := texture_ids_row[0];
-
-	current_row_is_full := tile_map.is_full[0];
-	current_tile_is_full: bool = true;
-
-	current_wall_texture := textures[tile_texture_ids.wall].samples[mip_level];
-	current_floor_texture:= textures[tile_texture_ids.floor].samples[mip_level];
-	// current_ceiling_texture: ^Samples = textures[tile_texture_ids.ceiling].samples[mip_level];
+    tile := &tile_map.cells[0][0];
+	wall_samples  := textures[tile.texture_id].samples[mip_level];
+	floor_samples := floor_texture.samples[mip_level];
 
 	u, v: f32;
 	u_step := 1 / size.scaled_tile.width;
@@ -263,44 +220,30 @@ drawMiniMapTextures :: proc(using mm: ^MiniMap) {
     	wall_pixel_row = &walls.cells[y];
     
     	for floor_pixel, x in &floor_pixel_row {
-    		sample(current_floor_texture, u, v, &floor_pixel);
-    		if current_tile_is_full do
-    			sample(current_wall_texture, u, v, &wall_pixel_row[x]);	
+    		sample(floor_samples, u, v, &floor_pixel);
+    		if tile.is_full do sample(wall_samples, u, v, &wall_pixel_row[x]);	
 
     		u += u_step;
     		if u >= 1 && i32(x) < (floor.width - 1) {
 	    		u -= 1;
 
 	    		tile_index.x += 1;
-	    		tile_texture_ids = texture_ids_row[tile_index.x];
-
-	    		column_id <<= 1;
-	    		current_tile_is_full = (current_row_is_full & column_id) != 0;
-				current_floor_texture = textures[tile_texture_ids.floor].samples[mip_level];
-	    		if current_tile_is_full do
-	    			current_wall_texture = textures[tile_texture_ids.wall].samples[mip_level];
+	    		tile = &tile_map.cells[tile_index.y][tile_index.x];
+	    		if tile.is_full do wall_samples = textures[tile.texture_id].samples[mip_level];
 	    	}
     	}
 
     	tile_index.x = 0;
     	u = 0;
     	v += v_step;
+
     	if v >= 1 && i32(y) < (floor.height - 1) {
     		v -= 1;
-    		
     		tile_index.y += 1;
-    		current_row_is_full = tile_map.is_full[tile_index.y];
-    		
-    		texture_ids_row = &tile_map.texture_ids.cells[tile_index.y];
     	}
 
-    	tile_texture_ids = texture_ids_row[0];
-
-		column_id = 1;
-		current_tile_is_full = (current_row_is_full & column_id) != 0;			
-		current_floor_texture = textures[tile_texture_ids.floor].samples[mip_level];
-		if current_tile_is_full do
-			current_wall_texture = textures[tile_texture_ids.wall].samples[mip_level];
+		tile = &tile_map.cells[tile_index.y][tile_index.x];		
+		if tile.is_full do wall_samples = textures[tile.texture_id].samples[mip_level];
     }
 }
 

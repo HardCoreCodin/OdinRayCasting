@@ -47,76 +47,6 @@ WALLS := `
 11111111111111111111111111111111
 `;
 
-FLOOR := `
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-77777777777777777777777777777777
-`;
-
-CEILING := `
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-33333333333333333333333333333333
-`;
-
 SPEED :: 240;
 MOVEMENT_SPEED :: 0.04;
 TURNING_SPEED :: 0.01;
@@ -129,22 +59,19 @@ class_name :: "Application";
 camera: Camera2D;
 camera_controller: CameraController2D;
 
-next_pos_f: f32;
-next_pos_i: i32;
 body_radius: f32 = 0.3;
 next_tile: ^Tile;
 tile_map_changed: bool;
 
 frame_buffer_bits: [FRAME_BUFFER__MAX_SIZE]u32;
-frame_buffer: FrameBuffer;
+frame_buffer: Bitmap;
 
 resize :: proc(new_width, new_height: i32) {
-	initGrid(&frame_buffer, new_width, new_height, transmute([]FrameBufferPixel)(frame_buffer_bits[:]));
+	initGrid(&frame_buffer, new_width, new_height, transmute([]Pixel)(frame_buffer_bits[:]));
 	
 	onResize();
 	update();
 	render();
-	print(new_width, new_height);
 }
 
 mouseOnMiniMap :: inline proc() -> bool do return mini_map.is_visible && inBounds(mini_map.screen_bounds, mouse_pos);
@@ -161,10 +88,6 @@ update :: proc() {
 	mini_map.is_visible = show_minimap;
 	mini_map.is_debug_visible = show_minimap_debug;
 
-	ticks_after = getTicks();
-	ticks_diff = ticks_after - ticks_before;
-	delta_time = f32(f64(ticks_diff) * seconds_per_tick);
-
 	if mouse_moved {
 		if mouse_is_captured do onMouseMoved(&camera_controller);
 		else if middle_mouse_button.is_pressed {
@@ -177,31 +100,30 @@ update :: proc() {
 			} else do panMiniMap(&mini_map);
 		}
 	}
+
+	ticks_after = getTicks();
+	ticks_diff = ticks_after - ticks_before;
+	delta_time = f32(f64(ticks_diff) * seconds_per_tick);
 	
 	onUpdate2D(&camera_controller);
+
+	ticks_before = getTicks();
+
 	if moved { // Detect collisions:
 		if movement.x > 0 {
-			next_pos_f = position.x + body_radius;
-			next_pos_i = i32(next_pos_f);
-			if (tile_map.is_full[u8(position.y)] & (1 << u32(next_pos_i))) != 0 do 
-				position.x = f32(next_pos_i) - body_radius;
+			next_tile = &tile_map.cells[i32(position.y)][i32(position.x + body_radius)];
+			if next_tile.is_full do position.x = f32(next_tile.bounds.left) - body_radius;
 		} else if movement.x < 0 {
-			next_pos_f = position.x - body_radius;
-			next_pos_i = i32(next_pos_f);
-			if (tile_map.is_full[u8(position.y)] & (1 << u32(next_pos_i))) != 0 do 
-				position.x = f32(next_pos_i) + 1 + body_radius;
+			next_tile = &tile_map.cells[i32(position.y)][i32(position.x - body_radius)];
+			if next_tile.is_full do position.x = f32(next_tile.bounds.right) + body_radius;
 		}
 		
 		if movement.y < 0 {
-			next_pos_f = position.y - body_radius;
-			next_pos_i = i32(next_pos_f);
-			if (tile_map.is_full[next_pos_i] & (1 << u8(position.x))) != 0 do 
-				position.y = f32(next_pos_i) + 1 + body_radius;
+			next_tile = &tile_map.cells[i32(position.y - body_radius)][i32(position.x)];
+			if next_tile.is_full do position.y = f32(next_tile.bounds.bottom) + body_radius;
 		} else if movement.y > 0 {
-			next_pos_f = position.y + body_radius;
-			next_pos_i = i32(next_pos_f);
-			if (tile_map.is_full[next_pos_i] & (1 << u8(position.x))) != 0 do 
-				position.y = f32(next_pos_i) - body_radius;
+			next_tile = &tile_map.cells[i32(position.y + body_radius)][i32(position.x)];
+			if next_tile.is_full do position.y = f32(next_tile.bounds.top) - body_radius;
 		}
 
 		movement = position - old_position;
@@ -221,12 +143,7 @@ update :: proc() {
 			tile_coords = {i32(tile_pos.x), i32(tile_pos.y)};
 			if !(tile_coords.x == i32(position.x) && 
 			     tile_coords.y == i32(position.y)) {
-				if left_mouse_button.is_pressed {
-					tile_map.texture_ids.cells[tile_coords.y][tile_coords.x].wall = 0;
-					tile_map.is_full[tile_coords.y] |= (1 << u16(tile_coords.x));
-				} else do 
-					tile_map.is_full[tile_coords.y] &= ~(1 << u16(tile_coords.x));
-
+				tile_map.cells[tile_coords.y][tile_coords.x].is_full = left_mouse_button.is_pressed;
 				tile_map_changed = true;
 			}
 		}
@@ -258,8 +175,6 @@ update :: proc() {
 	   mini_map.zoom.changed || 
 	   mini_map.panned || 
 	   mini_map.toggled do drawMiniMap(&mini_map);
-
-	ticks_before = getTicks();
 }
 
 render :: proc() {
@@ -309,9 +224,9 @@ initApplication :: proc(platformGetTicks: GetTicks, platformTicksPerSecond: u64)
 	using camera.xform;
 	position = 20;
 
+	initColors();
 	initTimers(platformGetTicks, platformTicksPerSecond);
-
-	initGrid(&frame_buffer, FRAME_BUFFER__MAX_WIDTH, FRAME_BUFFER__MAX_HEIGHT, transmute([]FrameBufferPixel)(frame_buffer_bits[:]));
+	initGrid(&frame_buffer, FRAME_BUFFER__MAX_WIDTH, FRAME_BUFFER__MAX_HEIGHT, transmute([]Pixel)(frame_buffer_bits[:]));
 	
 	initCamera(&camera);
 	initCameraController(&camera_controller.controller);
@@ -320,7 +235,7 @@ initApplication :: proc(platformGetTicks: GetTicks, platformTicksPerSecond: u64)
 	initRender();
 
 	initTileMap(&tile_map);
-	readTileMap(&tile_map, &WALLS, &FLOOR, &CEILING);
+	readTileMap(&tile_map, &WALLS);
 	generateTileMapEdges(&tile_map);
 	moveTileMap(&tile_map, position);
 	

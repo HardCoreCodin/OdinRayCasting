@@ -6,6 +6,63 @@ Texture :: struct {
 	bitmaps: []^Bitmap
 	samples: []^Samples
 }
+TextureSet :: struct {
+	bitmaps: [][]Bitmap,
+	samples: [][]Samples,
+	textures: []Texture
+}
+
+initTextureSet :: proc(using ts: ^TextureSet, count, width, height: i32) {
+	mip_count: i32 = 1;
+	mip_width: i32 = 1;
+
+	for mip_width < width {
+		mip_width *= 2;
+		mip_count += 1;
+	}
+
+	textures = make_slice([]Texture, count);
+	for texture in &textures {
+		texture.bitmaps = make_slice([]^Bitmap, mip_count);
+		texture.samples = make_slice([]^Samples, mip_count);
+	}
+
+	o, os: i32;
+	w := width;
+	h := height;
+	s := w * h;
+	ss := (w + 1) * (h + 1);
+
+	bitmaps = make_slice([][]Bitmap , mip_count);
+	samples = make_slice([][]Samples, mip_count);
+
+	for m in 0..<mip_count {
+		bitmaps[m] = make_slice([]Bitmap , count);
+		samples[m] = make_slice([]Samples, count);
+
+		all_pixels  := make_slice([]Pixel , count * s);
+		all_samples := make_slice([]Sample, count * ss);
+
+		o = 0;
+		os = 0;
+
+		for t in 0..<count {
+			initGrid(&bitmaps[m][t], w, h, all_pixels[ o:o+s]);
+			initGrid(&samples[m][t], w+1, h+1, all_samples[os:os+ss]);
+
+			textures[t].bitmaps[m] = &bitmaps[m][t];
+			textures[t].samples[m] = &samples[m][t];
+
+			o += s;
+			os += ss;
+		}
+
+		w >>= 1;
+		h >>= 1;
+		s = w*h;
+		ss = (w + 1) * (h + 1);
+	}
+}
 
 generateMipMaps :: proc(mipmaps: ^[]^Bitmap) {
 	src := mipmaps[0];
@@ -31,127 +88,137 @@ generateMipMaps :: proc(mipmaps: ^[]^Bitmap) {
 }
 
 generateSamplesFromBitmap :: proc(samples: ^Samples, using bitmap: ^Bitmap, smear_edges: bool = true, wrap_edges: bool = false) {
-	tl, tr, bl, br: ^vec4;
-	
-	i: [4]i32; 
+	T, L: u32;
+	B := u32(height - 1);
+	R := u32(width  - 1);
 
-	T,
-	B: i32;
-	B = width;
+	for y in T..<B do
+		for x in L..<R do
+			samples.cells[y+1][x+1] = {
+				cells[y+0][x+0], cells[y+0][x+1],
+				cells[y+1][x+0], cells[y+1][x+1]
+			};
 
-	L: i32;
-	BR: i32 = size - 1;
-	R: i32 = width - 1;
-	BL: i32 = BR - R;
-	__: i32 = -1;
+	sample: Sample;
+	TL := cells[T][L];  TR := cells[T][R];
+	BL := cells[B][L];  BR := cells[B][R];
 
-	x, y,
-	X, Y: i32;
-
-	for row, row_index in &samples.cells {
-		Y = i32(row_index);
-		y = Y - 1;
-
-		for sample, column_index in &row {
-			X = i32(column_index);
-			x = X - 1;
-
-			i = {T+x, T+x+1,
-				 B+x, B+x+1};
-
-			if wrap_edges {
-				if (X == 0 || X == width) {  
-					if (Y == 0 || Y == height) do i = { // TL/TR/BL/BR
-						BR, BL,
-				        R,  L
-				    }; else do i = { // L/R:
-				    	T+R, T,  
-				    	B+R, B
-				    };
-				} else if (Y == 0 || Y == height) do i = { // T/B
-					BL+x, BL+x+1,
-				    x,    x+1
-				};
-			} else if smear_edges {
-				if Y == 0 {
-					if X == 0 do i = { // TL
-						L, L,
-				        L, L
-				    }; else if X == width do i = { // TR
-						R, R,
-				        R, R
-				    }; else do i = { // T
-						x, x+1,
-				        x, x+1
-					};
-				} else if Y == height {
-					if X == 0 do i = { // BL
-						BL, BL,
-				        BL, BL		
-					}; else if X == width do i = { // BR
-						BR, BR,
-				        BR, BR
-					}; else do i = { // B
-						BL+x, BL+x+1,
-				        BL+x, BL+x+1
-					};
-				} else { 
-					if X == 0 do i = { // T
-						T, T,
-				        B, B
-					}; else if X == width do i = { // R
-						T+R, T+R,
-				        B+R, B+R
-					};
-				}
-			} else {
-				if Y == 0 { 
-					if X == 0 do i = { // TL
-						__, __,
-				        __, L		
-					}; else if X == width do i = { // TR
-						__, __,
-				        R, __
-					}; else do i = { // T
-						__, __,
-				        x, x+1
-					};
-				} else if Y == height { 
-					if X == 0 do i = { // BL
-						__, BL,
-				        __, __		
-					}; else if X == width do i = { // BR
-						BR, __,
-				        __,  __
-					}; else do i = { // B
-						BL+x, BL+x+1,
-				        __,    __ 
-					};
-				} else { 
-					if X == 0 do i = { // L
-						__, T,
-				        __, B
-					}; else if X == width do i ={ // R
-						T+R, __,
-				        B+R, __
-					};
-				}
-			}
-
-			if i[0] == __ do tl = &BLACK else do tl = &bitmap._cells[i[0]];
-			if i[1] == __ do tr = &BLACK else do tr = &bitmap._cells[i[1]];
-			if i[2] == __ do bl = &BLACK else do bl = &bitmap._cells[i[2]];
-			if i[3] == __ do br = &BLACK else do br = &bitmap._cells[i[3]];
+	if wrap_edges {
+		// Set corner sample (same for all 4 corners):
+		sample = {
+			BR, BL,
+			TL, TR
+		};
+		
+		samples.cells[T  ][L] = sample;  samples.cells[T  ][R+1] = sample;	
+		samples.cells[B+1][L] = sample;  samples.cells[B+1][R+1] = sample;
+		
+		// Set first and last row (they are the same):
+		for x in L..<R { // Note: Corners excluded as they were alreay set above 
 			sample = {
-				tl^, tr^,
-				bl^, br^
+				cells[B][x], cells[B][x+1],
+				cells[T][x], cells[T][x+1]
+			};
+
+			samples.cells[T  ][x+1] = sample;
+			samples.cells[B+1][x+1] = sample;
+		}
+
+		// Set first and last column (they are the same):
+		for y in T..<B { // Note: Corners excluded as they were alreay set above 
+			sample = {
+				cells[y  ][R], cells[y  ][L],
+				cells[y+1][R], cells[y+1][L]
+			};
+
+			samples.cells[y+1][L  ] = sample;
+			samples.cells[y+1][R+1] = sample;
+		}
+	} else if smear_edges {
+		// Set corner samples:
+		// Note: They're all uniform blocks so they can get broadcasted into:
+		samples.cells[T  ][L] = TL;  samples.cells[T  ][R+1] = TR;	
+		samples.cells[B+1][L] = BL;  samples.cells[B+1][R+1] = BR;
+		
+		// Set first and last row:
+		for x in L..<R { // Note: Corners excluded as they were alreay set above 
+			TL = cells[T][x];  TR = cells[T][x+1];
+			sample = {
+				TL, TR,
+				TL, TR
+			};
+			samples.cells[T  ][x+1] = sample;
+			samples.cells[B+1][x+1] = sample;
+		}
+
+		// Set first and last column (they are the same):
+		for y in T..<B { // Note: Corners excluded as they were alreay set above 
+			TL = cells[y  ][L];
+			BL = cells[y+1][L];
+
+			sample = {
+				TL, TL,
+				BL, BL
+			};
+
+			samples.cells[y+1][L  ] = sample;
+			samples.cells[y+1][R+1] = sample;
+		}
+	} else { // Set out-of-bound texel samples to trasnsparent black
+		__ := cells[0][0];
+		__.r = 0;
+		__.g = 0;
+		__.b = 0;
+		__.a = 0;
+		
+		// Set corner samples:
+		samples.cells[T][L] = {
+			__, __,
+			__, TL,
+		};  
+		samples.cells[T][R+1] = {
+			__, __,
+			TR, __,
+		};
+		
+		samples.cells[B+1][L] = {
+			__, BL,
+			__, __,
+		};  
+		samples.cells[B+1][R+1] = {
+			BR, __,
+			__, __,
+		};
+		
+		// Set first and last row:
+		for x in L..<R { // Note: Corners excluded as they were alreay set above 
+			TL = cells[T][x];  TR = cells[T][x+1];
+			BL = cells[B][x];  BR = cells[B][x+1];
+
+			samples.cells[T][x+1] = {
+				__, __,
+				TL, TR,
+			};
+			samples.cells[B+1][x+1] = {
+				BL, BR,	
+				__, __,
 			};
 		}
 
-		if Y != 0 {
-			T = B;
-			B += width;
-		}
+		// Set first and last column (they are the same):
+		for y in T..<B { // Note: Corners excluded as they were alreay set above 
+			TL = cells[y  ][L];  TR = cells[y  ][R];
+			BL = cells[y+1][L];  BR = cells[y+1][R];
+
+			samples.cells[y+1][L  ] = {
+				__, TL,
+				__, BL
+			};
+			samples.cells[y+1][R+1] = {
+				TR, __,
+				BR, __
+			};
+		}	
 	}
 }
 
@@ -159,44 +226,23 @@ generateTextureSamples :: proc(using texture: ^Texture, smear_edges: bool = true
 	for bitmap, mip in &bitmaps do 
 		generateSamplesFromBitmap(samples[mip], bitmap, smear_edges, wrap_edges);
 
-sample2 :: inline proc(using samples: ^Samples, u, v: f32, out: ^$Out) {
-	U := u * f32(width ) - 0.5;
-	V := v * f32(height) - 0.5;
-	
- 	x := i32(U);
- 	y := i32(V);
-
-	r := U - f32(x); 
-	b := V - f32(y);   
-	
-	l := 1 - r;
-	t := 1 - b;
-
-	// tl := t * l;    tr := t * r;
-	// bl := b * l;    br := b * r;
-
-	samples := &cells[y][x];
-
-	// using samples;
-	top := samples[0] * l + samples[1] * r;
-	bottom := samples[2] * l + samples[3] * r;
-	out^ = top * t + bottom * b;
-
-	// out.R = u8(result.r);
-	// out.G = u8(result.g);
-	// out.B = u8(result.b);
-	// out.a = u8(result.a);
-}
 sample :: inline proc(using samples: ^Samples, u, v: f32, out: ^$Out) {
-	U := u * f32(width ) - 0.5; x := i32(U);
-	V := v * f32(height) - 0.5; y := i32(V);
+	U := u * f32(width - 1) + 0.5; x := i32(U);
+	V := v * f32(height - 1) + 0.5; y := i32(V);
 	r := U - f32(x); l := 1 - r;
 	b := V - f32(y); t := 1 - b;
+	tl:= t * l; tr := t*r;
+	bl:= b * l; br := b*r;
 
 	samples := &cells[y][x];
-	// using samples;
-	// color^ = TL*t*l + TR*t*r + BL*b*l + BR*b*r;
-	out^ = samples[0]*t*l + samples[0]*t*r + samples[2]*b*l + samples[3]*b*r;
+	TL, TR, BL, BR: vec4;
+	setPixel(&TL, &samples[0]);
+	setPixel(&TR, &samples[1]);
+	setPixel(&BL, &samples[2]);
+	setPixel(&BR, &samples[3]);
+	
+	result := TL*tl + TR*tr + BL*bl + BR*br;
+	setPixel(out, &result);
 }
 
 sampleTexture :: inline proc(texture: ^Texture, mip_level: u8, u, v: f32, out: ^$Out) do _sample(texture.samples[mip_level], u, v, out);
@@ -207,8 +253,17 @@ scaleTexture :: proc(from: ^Samples, to: ^$S/Grid) {
 			sample(from, f32(x)/f32(to.width), f32(y)/f32(to.height), &to.cells[y][x]);
 }
 
-loadTexture :: proc(using texture: ^Texture, file: ^[]u8, smear_edges: bool = true, wrap_edges: bool = false) {
+loadTexture :: proc(using texture: ^Texture, file: ^[]u8, smear_edges: bool = false, wrap_edges: bool = false) {
 	readBitmapFromFile(bitmaps[0], file, bitmaps[0]._cells);
 	generateMipMaps(&bitmaps);
 	generateTextureSamples(texture, smear_edges, wrap_edges);
+}
+
+loadTextureSet :: proc(using texture_set: ^TextureSet, file_buffers: ^[][]u8, width, height: i32, smear_edges: bool = false, wrap_edges: bool = false) {
+	if len(samples) == 0 do
+		initTextureSet(texture_set, i32(len(file_buffers)), width, height);
+
+	for texture, texture_id in &textures {
+		loadTexture(&texture, &file_buffers[texture_id], smear_edges, wrap_edges);
+	}
 }

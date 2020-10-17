@@ -8,7 +8,8 @@ RayHit :: struct {
     edge_fraction,
     tile_fraction: f32,
     
-    edge: ^TileEdge
+    edge: ^TileEdge,
+    texture_id: u8
 }
 Ray :: struct {     
     origin: ^vec2,
@@ -29,67 +30,66 @@ Ray :: struct {
 all_rays: [FRAME_BUFFER__MAX_WIDTH]Ray;
 rays: []Ray;
 
-VerticalHitInfo :: struct #align(16) {
+VerticalHitLevel :: struct #align(16) {
     distance, 
     dim_factor,
     mip_factor: f32,
-    mip_level: u8
+    mip_level: u8,
 }
-all_vertical_hit_infos: [FRAME_BUFFER__MAX_HEIGHT/2]VerticalHitInfo;
-vertical_hit_infos: []VerticalHitInfo;
-
 VerticalHit :: struct {
-    info: ^VerticalHitInfo,
-    floor_texture, 
-    ceiling_texture: ^Bitmap,
-    
+    dim_factor: f32,
     direction: vec2,
     tile_coords: vec2i,
-    
     u, v: f32,
+
+    floor_texture_id,
+    ceiling_texture_id: u8,
+
     found: bool
 }
+vertical_hit_levels: [FRAME_BUFFER__MAX_HEIGHT / 2]VerticalHitLevel; 
+vertical_hits_buffer: [FRAME_BUFFER__MAX_WIDTH * (FRAME_BUFFER__MAX_HEIGHT / 2)]VerticalHit;
+vertical_hits: Grid(VerticalHit);
 
-VerticalHitRow :: []VerticalHit;
-VerticalHitGrid :: []VerticalHitRow;
+horizontal_distance_factor: f32 = 20 * DIM_FACTOR_RANGE / MAX_TILE_MAP_VIEW_DISTANCE;
+vertical_distance_factor: f32;
 
-all_vertical_hits: VerticalHitRow;
-all_vertical_hit_rows: [FRAME_BUFFER__MAX_HEIGHT/2]VerticalHitRow;
-vertical_hits: VerticalHitGrid;
-
-distance_factor: f32 = DIM_FACTOR_RANGE / MAX_TILE_MAP_VIEW_DISTANCE;
 half_width,
 half_height: f32;
 
 initRayCast :: proc() {
-    bits := new([FRAME_BUFFER__MAX_WIDTH * (FRAME_BUFFER__MAX_HEIGHT * 2)]VerticalHit);
-    all_vertical_hits = bits^[:];
-
     onResize();
 }
 
 onResize :: proc() {
     using frame_buffer;
-
     half_width = f32(width) / 2;
     half_height = f32(height) / 2;
-
     half_height_int := height / 2;
+    vertical_distance_factor = f32(DIM_FACTOR_RANGE) / f32(height);
 
     rays = all_rays[:width];
-    vertical_hit_infos = all_vertical_hit_infos[:half_height_int];
 
-    start: i32;
-    end := width;
+    initGrid(&vertical_hits, width, half_height_int, vertical_hits_buffer[:]);
 
-    for y in 0..<half_height_int {
-        all_vertical_hit_rows[y] = all_vertical_hits[start:end];
-        start += width;
-        end   += width;
+    current_mip_level: f32 = f32(MIP_COUNT);  
+    current_mip_levelI: i32;
+
+    vertical_hit_level: ^VerticalHitLevel; 
+
+    for y in 1..<half_height_int {
+        vertical_hit_level = &vertical_hit_levels[half_height_int - y];
+        using vertical_hit_level;
+
+        distance = camera.focal_length / f32(2 * y);
+        dim_factor = 1 / (1 + distance * half_width);// + MIN_DIM_FACTOR;
+
+        current_mip_level *= 0.975;
+        current_mip_levelI = i32(current_mip_level);
+        
+        mip_level = u8(current_mip_levelI);
+        mip_factor = current_mip_level - f32(current_mip_levelI);
     }
-
-    vertical_hits = all_vertical_hit_rows[:half_height_int];
-
     generateRays();
     castRays(&tile_map);
 }
@@ -106,27 +106,8 @@ generateRays :: proc() {
     ray_direction *= half_width;
     ray_direction += right_direction^ / 2;
 
-    num_vertical_hit_infos := len(vertical_hit_infos); 
-
-    vertical_hit_info: ^VerticalHitInfo;
-    current_mip_level: f32 = f32(MIP_COUNT);  
-    current_mip_levelI: i32;
-
-    for y in 1..num_vertical_hit_infos {
-        vertical_hit_info = &vertical_hit_infos[num_vertical_hit_infos - y];
-        using vertical_hit_info;
-        
-        distance = 1 / (2 * f32(y));
-        dim_factor = 1 - distance * half_height * distance_factor * 2 + MIN_DIM_FACTOR;
-        
-        current_mip_level *= 0.975;
-        current_mip_levelI = i32(current_mip_level);
-        
-        mip_level = u8(current_mip_levelI);
-        mip_factor = current_mip_level - f32(current_mip_levelI);
-    }
-
     vertical_hit: ^VerticalHit;
+    vertical_hit_level: ^VerticalHitLevel;
     for ray, x in &rays {
         using ray;
         origin = &position;
@@ -139,13 +120,18 @@ generateRays :: proc() {
         is_facing_down  = direction.y > 0;
         rise_over_run = direction.y / direction.x;
         run_over_rise = 1 / rise_over_run;
-        ray_direction += right_direction^;
 
-        for info, y in &vertical_hit_infos {
-            vertical_hit = &vertical_hits[y][x];
-            vertical_hit.direction = ray_direction * info.distance;
-            vertical_hit.info = &info;
+        for vertical_hit_row, y in &vertical_hits.cells {
+            if y == 0 do continue;
+
+            vertical_hit_level = &vertical_hit_levels[y];
+            vertical_hit = &vertical_hit_row[x];
+            vertical_hit.direction = ray_direction;
+            vertical_hit.direction *= vertical_hit_level.distance;
+            vertical_hit.dim_factor = max(vertical_hit_level.dim_factor, 1 / max(1, 0.25 + squared_length(vertical_hit.direction)));
         }
+
+        ray_direction += right_direction^;
     }
 }
 
@@ -168,40 +154,51 @@ rayIntersectsWithEdge :: proc(ray: ^Ray, edge: ^TileEdge, hit: ^RayHit) -> bool 
     return false;
 }
 
-castRay :: proc(using ray: ^Ray, using tm: ^TileMap) {
-    closest_hit, current_hit: RayHit;
-    closest_hit.distance = 1000000;
-    for edge in &edges do if edge.is_facing_forward && rayIntersectsWithEdge(ray, &edge, &current_hit) {
-        current_hit.distance = squared_length(current_hit.position);
-        if current_hit.distance < closest_hit.distance do closest_hit = current_hit;
-    }
-    hit = closest_hit;
-    using hit;
-    position += origin^;
-    distance = sqrt(distance);
-
-    tile_coords.x = i32(position.x);
-    tile_coords.y = i32(position.y);
-
-    if edge.is_vertical {
-        edge_fraction = position.y - f32(edge.from.y);
-        if edge.is_facing_right do tile_coords.x -= 1;
-    } else {
-        edge_fraction = position.x - f32(edge.from.x);
-        if edge.is_facing_down do tile_coords.y -= 1;
-    }
-    tile_fraction = edge_fraction - f32(i32(edge_fraction));
-}
-
 castRays :: inline proc(using tm: ^TileMap) {
-    for ray in &rays do castRay(&ray, tm);
-
     pos: vec2;
     using camera.xform;
+    last_tile_coords: vec2i = {-1, -1};
+    last_tile_texture_id: u8;
 
-    for row in &vertical_hits {
-        for hit in &row {
-            using hit;
+    closest_hit, current_hit: RayHit;
+
+    for ray in &rays {
+        using ray;
+        closest_hit.distance = 1000000;
+        for edge in &edges do if edge.is_facing_forward && rayIntersectsWithEdge(&ray, &edge, &current_hit) {
+            current_hit.distance = squared_length(current_hit.position);
+            if current_hit.distance < closest_hit.distance do closest_hit = current_hit;
+        }
+        hit = closest_hit;
+        using hit;
+        position += origin^;
+        distance = sqrt(distance);
+
+        tile_coords.x = i32(position.x);
+        tile_coords.y = i32(position.y);
+
+        if edge.is_vertical {
+            edge_fraction = position.y - f32(edge.from.y);
+            if edge.is_facing_right do tile_coords.x -= 1;
+        } else {
+            edge_fraction = position.x - f32(edge.from.x);
+            if edge.is_facing_down do tile_coords.y -= 1;
+        }
+        tile_fraction = edge_fraction - f32(i32(edge_fraction)); 
+
+        if tile_coords.x != last_tile_coords.x ||
+           tile_coords.y != last_tile_coords.y {
+
+            last_tile_texture_id = cells[tile_coords.y][tile_coords.x].texture_id;
+            last_tile_coords = tile_coords;
+        }
+
+        texture_id = last_tile_texture_id;
+    }
+
+    for vertical_hit_row in &vertical_hits.cells {
+        for vertical_hit in &vertical_hit_row {
+            using vertical_hit;
             pos = position + direction;
             found = inRange(0, pos.x, f32(width-1)) &&
                     inRange(0, pos.y, f32(height-1));
@@ -212,8 +209,12 @@ castRays :: inline proc(using tm: ^TileMap) {
                 u = pos.x - f32(tile_coords.x);
                 v = pos.y - f32(tile_coords.y);
 
-                // u = pos.x / f32(width);
-                // v = pos.y / f32(height);
+                if tile_coords.x != last_tile_coords.x ||
+                   tile_coords.y != last_tile_coords.y {
+
+                    last_tile_texture_id = cells[tile_coords.y][tile_coords.x].texture_id;
+                    last_tile_coords = tile_coords;
+                }
             }
         } 
     }
