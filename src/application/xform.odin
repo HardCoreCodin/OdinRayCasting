@@ -74,7 +74,11 @@ initXform4 :: proc(using out: ^xform4) {
     up_direction      = &Y;
     forward_direction = &Z;
 }
-initXform :: proc{initXform2, initXform3, initXform4};
+initXform :: proc{
+    initXform2, 
+    initXform3, 
+    initXform4
+};
 
 rotate2D :: inline proc(using transform: ^xform2, yaw_angle: f32 = 0, pitch_angle: f32 = 0) {
     if yaw_angle == 0 do return;
@@ -83,21 +87,25 @@ rotate2D :: inline proc(using transform: ^xform2, yaw_angle: f32 = 0, pitch_angl
     mulMat2(&matrix, &rotation_matrix, &matrix);
 }
 rotate3D :: inline proc(using transform: ^xform3, yaw_angle: f32 = 0, pitch_angle: f32 = 0, roll_angle: f32  = 0) {
-    if yaw_angle == 0 do setMat3ToIdentity(&yaw_matrix); else do yaw3(yaw_angle, &yaw_matrix);
-    if pitch_angle == 0 do setMat3ToIdentity(&pitch_matrix); else do pitch3(pitch_angle, &pitch_matrix);
-    if roll_angle == 0 do setMat3ToIdentity(&roll_matrix); else do roll3(roll_angle, &roll_matrix);
+    if yaw_angle   != 0 do yaw3(yaw_angle, &yaw_matrix);
+    if pitch_angle != 0 do pitch3(pitch_angle, &pitch_matrix);
+    if roll_angle  != 0 do roll3(roll_angle, &roll_matrix);
     mulMat3(&pitch_matrix, &yaw_matrix, &rotation_matrix);
     mulMat3(&rotation_matrix, &roll_matrix, &rotation_matrix);
     transposeMat3(&rotation_matrix, &rotation_matrix_inverted);
     mulMat3(&matrix, &rotation_matrix, &matrix);
 }
 rotate4D :: inline proc(using transform: ^xform4, yaw_angle: f32 = 0, pitch_angle: f32 = 0, roll_angle: f32 = 0) {
-    if yaw_angle == 0 do setMat4ToIdentity(&yaw_matrix); else do yaw4(yaw_angle, &yaw_matrix);
-    if pitch_angle == 0 do setMat4ToIdentity(&pitch_matrix); else do pitch4(pitch_angle, &pitch_matrix);
-    if roll_angle == 0 do setMat4ToIdentity(&roll_matrix); else do roll4(roll_angle, &roll_matrix);
+    if yaw_angle   != 0 do yaw4(yaw_angle, &yaw_matrix);
+    if pitch_angle != 0 do pitch4(pitch_angle, &pitch_matrix);
+    if roll_angle  != 0 do roll4(roll_angle, &roll_matrix);
     mulMat4(&pitch_matrix, &yaw_matrix, &rotation_matrix);
     mulMat4(&rotation_matrix, &roll_matrix, &rotation_matrix);
     transposeMat4(&rotation_matrix, &rotation_matrix_inverted);
     mulMat4(&matrix, &rotation_matrix, &matrix);
 }
-rotate :: proc{rotate2D, rotate3D, rotate4D};
+rotate :: proc{
+    rotate2D, 
+    rotate3D, 
+    rotate4D
+};

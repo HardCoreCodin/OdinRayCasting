@@ -146,31 +146,21 @@ _clearSample :: inline proc(sample: ^Sample, transparent: bool = false) do for p
 clearBitmap :: inline proc(bitmap: ^$T/Grid, transparent: bool = false) do for pixel in &bitmap._cells do clearPixel(&pixel, transparent);
 clearPixel :: proc{_clearPixel, _clearSample};
 
-_isTransparent :: inline proc(pixel: ^$T) -> bool do return pixel.r == 0xFF && pixel.b == 0xFF && pixel.g == 0;
-_readBitmapFromFileData :: proc(using bitmap: ^$T/Grid, bitmap_file_data: []u8) {
+readBitmapFromFile :: proc(using bitmap: ^Grid($Cell), file: ^[]u8) {
+	header:= (^BMP_FileHeader)(&file[0])^;
+	bitmap_file_data := file[header.data_offset:];
+
+	if len(_cells) == 0 do _cells = make_slice([]Cell, header.width * header.height);
+	
+	initGrid(bitmap, header.width, header.height, _cells);
+
 	bitmap_pixel: BitmapPixel;
 	for row, y in &cells do 
 		for pixel, x in &row {
 			pixel.color = (^BitmapColor)(&bitmap_file_data[((height-1 -i32(y))*width + i32(x))*3])^;
-			pixel.a = _isTransparent(&pixel.color) ? 0 : 0xFF;
+			pixel.a = pixel.r == 0xFF && pixel.b == 0xFF && pixel.g == 0 ? 0 : 0xFF;
 		}
 }
-_readBitmapFromFile :: proc(bitmap: ^Grid($Cell), file: ^[]u8, pixels: []Cell) {
-	header:= (^BMP_FileHeader)(&file[0])^;
-	bitmap_file_data := file[header.data_offset:];
-
-	initGrid(bitmap, header.width, header.height, pixels);
-	_readBitmapFromFileData(bitmap, bitmap_file_data);
-}
-_allocateAndReadBitmapFromFile :: proc(bitmap: ^$T/Grid , file: ^[]u8) {
-	header:= (^BMP_FileHeader)(&file[0])^;
-	bitmap_file_data := file[header.data_offset:];
-
-	pixels := make_slice([]Cell, header.width * header.height);
-	initGrid(bitmap, header.width, header.height, pixels);
-	_readBitmapFromFileData(bitmap.cells, bitmap_file_data);
-}
-readBitmapFromFile :: proc{_readBitmapFromFile, _allocateAndReadBitmapFromFile};
 
 sampleGrid :: inline proc(using grid: ^$T/Grid, u, v: f32, cell: ^$Cell) do setPixel(cell, &grid.cells[i32(v * f32(height))][i32(u * f32(width))]);
 scaleGrid :: proc(from: ^$T/Grid, to: ^$S/Grid) {

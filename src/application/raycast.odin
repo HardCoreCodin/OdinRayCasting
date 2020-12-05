@@ -9,6 +9,7 @@ RayHit :: struct {
     tile_fraction: f32,
     
     edge: ^TileEdge,
+    column: ^Circle,
     texture_id: u8
 }
 Ray :: struct {     
@@ -72,7 +73,7 @@ onResize :: proc() {
 
     initGrid(&vertical_hits, width, half_height_int, vertical_hits_buffer[:]);
 
-    current_mip_level: f32 = f32(MIP_COUNT);  
+    current_mip_level: f32 = f32(len(wall_textures[0].bitmaps));  
     current_mip_levelI: i32;
 
     vertical_hit_level: ^VerticalHitLevel; 
@@ -82,7 +83,7 @@ onResize :: proc() {
         using vertical_hit_level;
 
         distance = camera.focal_length / f32(2 * y);
-        dim_factor = 1 / (1 + distance * half_width);// + MIN_DIM_FACTOR;
+        dim_factor = 1.1 / (1 + distance * half_width);// + MIN_DIM_FACTOR;
 
         current_mip_level *= 0.975;
         current_mip_levelI = i32(current_mip_level);
@@ -128,10 +129,42 @@ generateRays :: proc() {
             vertical_hit = &vertical_hit_row[x];
             vertical_hit.direction = ray_direction;
             vertical_hit.direction *= vertical_hit_level.distance;
-            vertical_hit.dim_factor = max(vertical_hit_level.dim_factor, 1 / max(1, 0.25 + squared_length(vertical_hit.direction)));
+            vertical_hit.dim_factor = max(vertical_hit_level.dim_factor, 1.5 / max(1, 0.25 + squared_length(vertical_hit.direction)));
         }
 
         ray_direction += right_direction^;
+    }
+}
+
+Plane :: struct { position, normal: vec2}
+EPS :: 0.000001;
+
+getU :: proc(v: vec2) -> f32 {
+    u := v.y / v.x;
+    if u > 1 || u < -1 do u = -1 / u;
+    return (u + 1) * 0.5;
+}
+
+rayIntersectsWithPlane :: proc(ray: ^Ray, plane: ^Plane, hit: ^RayHit) -> bool {
+    RD_dot_N := dot2(ray.direction, plane.normal);                if RD_dot_N > 0 || -RD_dot_N < EPS do return false;
+    RP_dot_N := dot2(plane.position - ray.origin^, plane.normal);  if RP_dot_N > 0 || -RP_dot_N < EPS do return false;
+    t := RP_dot_N / RD_dot_N;
+    ray.hit.position = ray.origin^ + t*ray.direction;
+    return true;
+}
+
+rayIntersectsWithCircle :: proc(ray: ^Ray, circle: ^Circle, using hit: ^RayHit) {
+    C := circle.position - ray.origin^;
+    t := dot(C, ray.direction);
+    if (t > 0) {
+        dt := circle.radius * circle.radius - squared_length(ray.direction * t - C);
+        if (dt > 0 && t*t > dt) { // Inside the sphere
+            t -= sqrt(dt);
+            if column != nil ? t < distance : t*t < distance {
+                distance = t;
+                column = circle;
+            }
+        }
     }
 }
 
@@ -165,35 +198,50 @@ castRays :: inline proc(using tm: ^TileMap) {
     for ray in &rays {
         using ray;
         closest_hit.distance = 1000000;
+        
         for edge in &edges do if edge.is_facing_forward && rayIntersectsWithEdge(&ray, &edge, &current_hit) {
             current_hit.distance = squared_length(current_hit.position);
             if current_hit.distance < closest_hit.distance do closest_hit = current_hit;
         }
+
+        for column_id in 0..<column_count do rayIntersectsWithCircle(&ray, &columns[column_id], &closest_hit);
+
         hit = closest_hit;
         using hit;
-        position += origin^;
-        distance = sqrt(distance);
 
-        tile_coords.x = i32(position.x);
-        tile_coords.y = i32(position.y);
-
-        if edge.is_vertical {
-            edge_fraction = position.y - f32(edge.from.y);
-            if edge.is_facing_right do tile_coords.x -= 1;
+        if column != nil {
+            position = origin^ + direction * distance;
+            tile_coords.x = i32(position.x);
+            tile_coords.y = i32(position.y);
+            tile_fraction = getU(position - column.position);
+            tile_fraction *= column.radius;
+            tile_fraction -= f32(i32(tile_fraction));
+            texture_id = columns_texture_id;
         } else {
-            edge_fraction = position.x - f32(edge.from.x);
-            if edge.is_facing_down do tile_coords.y -= 1;
+            position += origin^;
+            distance = sqrt(distance);
+
+            tile_coords.x = i32(position.x);
+            tile_coords.y = i32(position.y);
+
+            if edge.is_vertical {
+                edge_fraction = position.y - f32(edge.from.y);
+                if edge.is_facing_right do tile_coords.x -= 1;
+            } else {
+                edge_fraction = position.x - f32(edge.from.x);
+                if edge.is_facing_down do tile_coords.y -= 1;
+            }
+            tile_fraction = edge_fraction - f32(i32(edge_fraction)); 
+
+            if tile_coords.x != last_tile_coords.x ||
+               tile_coords.y != last_tile_coords.y {
+
+                last_tile_texture_id = cells[tile_coords.y][tile_coords.x].texture_id;
+                last_tile_coords = tile_coords;
+            }
+
+            texture_id = last_tile_texture_id;   
         }
-        tile_fraction = edge_fraction - f32(i32(edge_fraction)); 
-
-        if tile_coords.x != last_tile_coords.x ||
-           tile_coords.y != last_tile_coords.y {
-
-            last_tile_texture_id = cells[tile_coords.y][tile_coords.x].texture_id;
-            last_tile_coords = tile_coords;
-        }
-
-        texture_id = last_tile_texture_id;
     }
 
     for vertical_hit_row in &vertical_hits.cells {

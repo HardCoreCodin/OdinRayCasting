@@ -134,14 +134,14 @@ run_application :: proc() {
 
 	initApplication(win32GetTicks, win32TicksPerSecond);
 	up_key       = 'R';
-	down_key     = 'T';
+	down_key     = 'F';
 	forward_key  = 'W';
 	backward_key = 'S';
 	left_key     = 'A';  turn_left_key  = 'Q';
 	right_key    = 'D';  turn_right_key = 'E';
 	
-	toggle_map_debug = '9';
-	toggle_map   = '0';
+	toggle_map_debug = VK_SHIFT;
+	toggle_map   = VK_TAB;
 	no_filter    = '1';
 	bi_linear    = '2';
 	tri_linear   = '3';

@@ -26,8 +26,8 @@ CameraController :: struct {
 
 initCameraController :: proc(ctrl: ^CameraController,
     zoom_amount: f32 = 1,
-    max_velocity: f32 = 5,
-    max_acceleration: f32 = 20,
+    max_velocity: f32 = 1,
+    max_acceleration: f32 = 6,
 
     turn_speed: f32 = 0.008) {
 

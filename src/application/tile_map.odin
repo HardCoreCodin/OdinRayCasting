@@ -7,6 +7,9 @@ MAX_TILE_MAP_SIZE :: MAX_TILE_MAP_WIDTH * MAX_TILE_MAP_HEIGHT;
 MAX_TILE_MAP_VERTICES :: (MAX_TILE_MAP_WIDTH + 1) * (MAX_TILE_MAP_HEIGHT + 1);
 MAX_TILE_MAP_EDGES :: MAX_TILE_MAP_WIDTH * (MAX_TILE_MAP_HEIGHT + 1) + MAX_TILE_MAP_HEIGHT * (MAX_TILE_MAP_WIDTH + 1);
 
+MAX_COLUMN_COUNT :: 16;
+Circle :: struct { radius: f32, position: vec2 }
+
 Tile :: struct {
 	top_edge, 
 	bottom_edge, 
@@ -51,9 +54,13 @@ TileMap :: struct {
 
 	edges: []TileEdge,
 	edge_count,
-	vertex_count: i32,
+	vertex_count,
+	column_count: i32,
 	vertices: []vec2i,
 	vertices_in_local_space: []vec2,
+
+	columns: [MAX_COLUMN_COUNT]Circle,
+	columns_texture_id: u8,
 
 	all_rows: [MAX_TILE_MAP_HEIGHT]TileRow,
 	all_tiles: [MAX_TILE_MAP_SIZE]Tile,
@@ -113,6 +120,7 @@ initTileMap :: proc(using tm: ^TileMap, Width: i32 = MAX_TILE_MAP_WIDTH, Height:
 	edges = all_edges[:];
 	vertices = all_vertices[:];
 	vertices_in_local_space = all_vertices_in_local_space[:];
+	columns_texture_id = 0;
 
 	for tile in &all_tiles do initTile(&tile);
 	initGrid(&tiles, width, height, all_tiles[:]);

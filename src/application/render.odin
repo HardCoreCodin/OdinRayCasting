@@ -5,34 +5,66 @@ MAX_DIM_FACTOR :: 1;
 DIM_FACTOR_RANGE :: MAX_DIM_FACTOR - MIN_DIM_FACTOR;
 
 MAX_COLOR_VALUE :: 0xFF;
-TEXTURE_COUNT :: 8;
-TEXTURE_WIDTH :: 64;
-TEXTURE_HEIGHT :: 64;
-TEXTURE_SIZE :: TEXTURE_WIDTH * TEXTURE_HEIGHT;
-MIP_COUNT :: 7;
 
-texture_files: [][]u8 = {
-	#load("../../assets/bluestone.bmp"),
-	#load("../../assets/colorstone.bmp"),
-	#load("../../assets/eagle.bmp"),
-	#load("../../assets/graystone.bmp"),
-	#load("../../assets/mossystone.bmp"),
-	#load("../../assets/purplestone.bmp"),
-	#load("../../assets/redbrick.bmp"),
-	#load("../../assets/wood.bmp")
+// texture_files: [][]u8 = {
+//     #load("../../assets/bluestone.bmp"),
+//     #load("../../assets/colorstone.bmp"),
+//     #load("../../assets/eagle.bmp"),
+//     #load("../../assets/graystone.bmp"),
+//     #load("../../assets/mossystone.bmp"),
+//     #load("../../assets/purplestone.bmp"),
+//     #load("../../assets/redbrick.bmp"),
+//     #load("../../assets/wood.bmp")
+// };
+
+floor_and_ceiling_texture_files: [][]u8 = {
+    #load("../../assets/256/walls/colored_stone.bmp"),
+    #load("../../assets/256/walls/purple_stone.bmp")
+};
+wall_texture_files: [][]u8 = {
+	#load("../../assets/256/walls/cobblestone2.bmp"),
+    #load("../../assets/256/walls/red_stone.bmp"),
+    #load("../../assets/256/walls/colored_stone.bmp"),
+	// #load("../../assets/128/walls/colored_stone.bmp"),
+	// #load("../../assets/128/walls/red_stone.bmp")
 };
 
-texture_set: TextureSet;
-textures: ^[]Texture;
-floor_texture,
+floor_and_ceiling_texture_set,
+wall_texture_set: TextureSet;
+wall_textures: ^[]Texture;
+floor_texture, 
 ceiling_texture: ^Texture;
 
-initRender :: proc() {
-	loadTextureSet(&texture_set, &texture_files, TEXTURE_WIDTH, TEXTURE_HEIGHT, false, true);
+texture_width,
+texture_height: i32;
+mip_count: u8;
 
-	textures = &texture_set.textures;
-    floor_texture   = &textures[7];
-    ceiling_texture = &textures[3];   
+initRender :: proc() {
+    temp_bitmap: Bitmap;
+    readBitmapFromFile(&temp_bitmap, &wall_texture_files[0]);
+    texture_width  = temp_bitmap.width;
+    texture_height = temp_bitmap.height;
+
+    loadTextureSet(
+        &floor_and_ceiling_texture_set, 
+        &floor_and_ceiling_texture_files, 
+        texture_width, 
+        texture_height
+    );
+    floor_texture   = &floor_and_ceiling_texture_set.textures[0];
+    ceiling_texture = &floor_and_ceiling_texture_set.textures[1];
+
+	loadTextureSet(
+        &wall_texture_set, 
+        &wall_texture_files, 
+        texture_width, 
+        texture_height
+    );
+	wall_textures = &wall_texture_set.textures;
+
+    mip_count = u8(len(floor_texture.bitmaps));
+
+    print(mip_count);
 }
 
 drawWalls :: proc(using cam: ^Camera2D) {
@@ -53,28 +85,21 @@ drawWalls :: proc(using cam: ^Camera2D) {
     ceiling_pixel_offset: i32;
 
 	mip_level: u8;
-	mip_count := u8(len(textures[0].samples));
 	last_mip := mip_count - 1;
 	initial_mip := f32(mip_count) * 0.9;
 	other_mip_level: u8 = 1;
 
 	current_mip_factor,
 	next_mip_factor: f32;
-	
-    tile_width  := textures[0].bitmaps[0].width;
-    tile_height := textures[0].bitmaps[0].height;
 
     wall_texture: ^Texture;
 
-    wall_bitmap, floor_bitmap, ceiling_bitmap: ^Bitmap;
-    wall_samples, 
-    floor_samples,
-    ceiling_samples,
+    wall_bitmap , floor_bitmap , ceiling_bitmap: ^Bitmap;
+    wall_samples, floor_samples, ceiling_samples,
     other_wall_samples,
     other_floor_samples,
     other_ceiling_samples: ^Samples;
-
-    // pixel,
+    
     other_wall_pixel, wall_pixel,
     other_floor_pixel, floor_pixel, 
     other_ceiling_pixel, ceiling_pixel: vec4;
@@ -148,7 +173,7 @@ drawWalls :: proc(using cam: ^Camera2D) {
         if distance < 0 do distance = -distance;
         
         distance_squared = distance * distance;
-        dim_factor = 1 / max(1, distance);
+        dim_factor = 1.1 / max(1, distance);
         
         half_column_height = half_max_distance / distance; 
         column_height = i32(half_column_height + half_column_height);
@@ -156,16 +181,14 @@ drawWalls :: proc(using cam: ^Camera2D) {
     	top    = column_height < height ? (height - column_height) / 2 : 0;
         bottom = column_height < height ? (height + column_height) / 2 : height;
 
-        wall_texture = &textures[hit.texture_id];
+        wall_texture = &wall_textures[hit.texture_id];
 
         texel_height = 1 / f32(column_height);
         v = column_height > height ? f32((column_height - height) / 2) * texel_height : 0;
         u = hit.tile_fraction;
 
-        if filter_mode == FilterMode.None {
-            wall_bitmap = wall_texture.bitmaps[0];
-        } else {
-            texture_height_ratio = texel_height * TEXTURE_HEIGHT / 14;
+        if filter_mode == FilterMode.None do wall_bitmap = wall_texture.bitmaps[0]; else {
+            texture_height_ratio = texel_height * 256 / 18;
             
             current_mip_levelf = initial_mip;
             for (current_mip_levelf / f32(mip_count)) > texture_height_ratio do current_mip_levelf *= 0.9;
@@ -197,7 +220,8 @@ drawWalls :: proc(using cam: ^Camera2D) {
             } 
             height_squared = (f32(y) - half_height) / half_column_height;
             height_squared *= height_squared;
-            wall_pixel *= max(dim_factor, 1 / max(1, height_squared + distance_squared));
+            wall_pixel *= max(dim_factor, 1.5 / max(1, height_squared + distance_squared));
+
             setPixel(&_cells[pixel_offset], &wall_pixel);
 
             pixel_offset += width;
